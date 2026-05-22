@@ -2,37 +2,31 @@
 
 This folder is SCORM 1.2-ready.
 
-## Why "binary files are not supported" appears
+## No software install required
 
-Many git web UIs and review tools cannot render `.zip` diffs and show a message like **"binary files are not supported"**.
+You do **not** need to install ZIP tools or extra apps.
 
-That is expected behavior. A SCORM upload file is a ZIP archive (binary), so the fix is:
-
-1. Keep source files in git (`imsmanifest.xml`, `index.html`, `css/`, `js/`).
-2. Build the `.zip` locally/CI when needed.
-3. Upload the generated ZIP to your LMS.
-
-This repo now ignores ZIP artifacts in this course folder via `.gitignore`.
-
-## Package for LMS upload
-
-From repo root:
+From the repo root, run:
 
 ```bash
 npm run scorm:package:bagger
 ```
 
-That command generates:
+That command uses Python's built-in `zipfile` library via `scripts/package-scorm.py`.
+
+## Output file
+
+The command creates one LMS upload file:
 
 - `public/courses/bagger-operator-scorm/bagger-operator-scorm.zip`
 
-The archive is built with these items at ZIP root:
-- `imsmanifest.xml`
-- `index.html`
-- `css/`
-- `js/`
+## Upload to LMS
 
-Upload `bagger-operator-scorm.zip` to your LMS as a SCORM 1.2 course.
+Upload that ZIP directly to your LMS as a SCORM 1.2 package.
+
+## If your git tool says "binary files are not supported"
+
+That is expected for ZIP files and does not mean the package is broken.
 
 ## Scoring behavior
 
