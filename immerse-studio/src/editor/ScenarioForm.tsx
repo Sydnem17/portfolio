@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { Block, Scene_, Choice_, Tool_ } from '../schema/course';
 import { uid } from '../schema/course';
 import { TextField, AreaField, SelectField, NumberField, CheckField, MiniButton, Row } from './fields';
+import { ImagePicker } from './ImagePicker';
 
 type ScenarioB = Extract<Block, { type: 'scenario' }>;
 
@@ -220,11 +221,11 @@ export function ScenarioForm({ block, onChange }: { block: ScenarioB; onChange: 
                   value={scene.ambient ?? ''}
                   onChange={(v) => updateScene(scene.id, { ambient: v || undefined })}
                 />
-                <TextField
-                  label="Background image address (optional)"
+                <ImagePicker
+                  label="Background image (optional)"
                   value={scene.image?.src ?? ''}
-                  onChange={(v) =>
-                    updateScene(scene.id, { image: v ? { src: v, alt: scene.image?.alt ?? '', decorative: true } : undefined })
+                  onChange={(src) =>
+                    updateScene(scene.id, { image: src ? { src, alt: scene.image?.alt ?? '', decorative: true } : undefined })
                   }
                 />
                 <CheckField

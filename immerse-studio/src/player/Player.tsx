@@ -3,6 +3,7 @@ import type { Course, Block } from '../schema/course';
 import { ScormBridge, emptyState, type SavedState } from './scorm';
 import { TextBlockView, ImageBlockView, AccordionBlockView, FlipCardsBlockView } from './blocks/SimpleBlocks';
 import { McqBlockView } from './blocks/McqBlock';
+import { HotspotBlockView } from './blocks/HotspotBlock';
 import { ScenarioEngine, type ScenarioResult } from './scenario/ScenarioEngine';
 
 /**
@@ -176,6 +177,8 @@ function BlockView({
       return <AccordionBlockView block={block} />;
     case 'flipcards':
       return <FlipCardsBlockView block={block} />;
+    case 'hotspot':
+      return <HotspotBlockView block={block} />;
     case 'mcq':
       return <McqBlockView block={block} savedSelection={state.mc[block.id]} onAnswer={onMcqAnswer} />;
     case 'scenario': {

@@ -57,6 +57,23 @@ export const FlipCardsBlock = z.object({
   cards: z.array(z.object({ front: z.string(), back: z.string() })).min(1),
 });
 
+export const HotspotSpot = z.object({
+  id: z.string(),
+  x: z.number().min(0).max(100), // percent from left
+  y: z.number().min(0).max(100), // percent from top
+  label: z.string(), // accessible name, e.g. "Fire extinguisher by the lift"
+  feedback: z.string(), // what the learner discovers
+});
+
+export const HotspotBlock = z.object({
+  type: z.literal('hotspot'),
+  id: z.string(),
+  prompt: z.string(), // e.g. "Explore the floor plan — find the safety equipment"
+  image: ImageRef,
+  spots: z.array(HotspotSpot).min(1),
+});
+export type HotspotSpot_ = z.infer<typeof HotspotSpot>;
+
 /* ---------------- Immersive scenario ---------------- */
 
 export const ToolAction = z.object({
@@ -116,6 +133,7 @@ export const Block = z.discriminatedUnion('type', [
   McqBlock,
   AccordionBlock,
   FlipCardsBlock,
+  HotspotBlock,
   ScenarioBlock,
 ]);
 export type Block = z.infer<typeof Block>;

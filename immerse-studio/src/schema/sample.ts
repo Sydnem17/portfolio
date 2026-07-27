@@ -1,5 +1,24 @@
 import type { Course } from './course';
 
+// Tiny inline SVG floor plan so the demo stays fully self-contained.
+const floorPlanSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="450" viewBox="0 0 800 450" font-family="sans-serif">
+<rect width="800" height="450" fill="#eef1f6"/>
+<rect x="20" y="20" width="760" height="410" fill="#ffffff" stroke="#1b2430" stroke-width="4"/>
+<rect x="20" y="20" width="240" height="180" fill="#dde7f5" stroke="#1b2430" stroke-width="3"/>
+<text x="140" y="115" text-anchor="middle" font-size="22" fill="#1b2430">Open office</text>
+<rect x="20" y="230" width="240" height="200" fill="#e4f0e4" stroke="#1b2430" stroke-width="3"/>
+<text x="140" y="335" text-anchor="middle" font-size="22" fill="#1b2430">Meeting rooms</text>
+<rect x="300" y="20" width="300" height="410" fill="#f7f3e8" stroke="#1b2430" stroke-width="3"/>
+<text x="450" y="230" text-anchor="middle" font-size="22" fill="#1b2430">Warehouse floor</text>
+<rect x="640" y="20" width="140" height="180" fill="#f5e3e3" stroke="#1b2430" stroke-width="3"/>
+<text x="710" y="115" text-anchor="middle" font-size="20" fill="#1b2430">Kitchen</text>
+<rect x="640" y="240" width="140" height="190" fill="#e8e3f5" stroke="#1b2430" stroke-width="3"/>
+<text x="710" y="340" text-anchor="middle" font-size="18" fill="#1b2430">Stairwell B</text>
+<rect x="270" y="20" width="24" height="60" fill="#c62f2f"/>
+<text x="282" y="105" text-anchor="middle" font-size="14" fill="#c62f2f">Stair A</text>
+</svg>`;
+const floorPlanSrc = `data:image/svg+xml;base64,${btoa(floorPlanSvg)}`;
+
 /**
  * Demo template: a first-person emergency-response course in the style the
  * tool is built for — the learner *is* in the building, holding a radio,
@@ -50,6 +69,45 @@ export const sampleCourse: Course = {
             {
               title: 'What about people who need help evacuating?',
               body: 'Know your workplace PEEP list (Personal Emergency Evacuation Plans). Assist if safe; otherwise report their location on the radio immediately.',
+            },
+          ],
+        },
+        {
+          type: 'hotspot',
+          id: 'h1',
+          prompt: 'Know your ground: explore the floor plan and find the four things every warden should be able to point to blindfolded.',
+          image: {
+            src: floorPlanSrc,
+            alt: 'Simplified floor plan of Level 2: open office and meeting rooms on the left, warehouse floor in the middle, kitchen and Stairwell B on the right, Stairwell A at the top of the warehouse.',
+          },
+          spots: [
+            {
+              id: 'h1a',
+              x: 35.2,
+              y: 11,
+              label: 'Stairwell A (east)',
+              feedback: 'Your closest fire stairs from the office — but closest is not always safest. In the scenario coming up, remember there are two ways down.',
+            },
+            {
+              id: 'h1b',
+              x: 88.7,
+              y: 74,
+              label: 'Stairwell B and refuge point (west)',
+              feedback: 'The second escape route, with a fire-rated refuge point beside it for anyone who cannot use stairs unassisted.',
+            },
+            {
+              id: 'h1c',
+              x: 56,
+              y: 51,
+              label: 'Extinguishers on the warehouse floor',
+              feedback: 'Wall-mounted extinguishers at each pillar line. Bin-sized fire, clear exit behind you, trained — otherwise walk past them and evacuate.',
+            },
+            {
+              id: 'h1d',
+              x: 88.7,
+              y: 25,
+              label: 'Kitchen',
+              feedback: 'The most common ignition source on this floor. If smoke is coming from here, the east side may be compromised early.',
             },
           ],
         },

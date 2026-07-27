@@ -2,6 +2,8 @@ import React from 'react';
 import type { Block } from '../schema/course';
 import { TextField, AreaField, CheckField, MiniButton, Row } from './fields';
 import { ScenarioForm } from './ScenarioForm';
+import { HotspotForm } from './HotspotForm';
+import { ImagePicker } from './ImagePicker';
 
 type Updater = (block: Block) => void;
 
@@ -25,12 +27,10 @@ export function BlockForm({ block, onChange }: { block: Block; onChange: Updater
     case 'image':
       return (
         <>
-          <TextField
-            label="Image address (URL)"
-            required
-            hint="Paste a link to the image. Uploading files is on the roadmap."
+          <ImagePicker
+            label="Image"
             value={block.image.src}
-            onChange={(v) => onChange({ ...block, image: { ...block.image, src: v } })}
+            onChange={(src) => onChange({ ...block, image: { ...block.image, src } })}
           />
           <AreaField
             label="Describe this image for people who can't see it"
@@ -193,6 +193,9 @@ export function BlockForm({ block, onChange }: { block: Block; onChange: Updater
           </MiniButton>
         </fieldset>
       );
+
+    case 'hotspot':
+      return <HotspotForm block={block} onChange={onChange} />;
 
     case 'scenario':
       return <ScenarioForm block={block} onChange={onChange} />;

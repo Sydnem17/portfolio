@@ -21,7 +21,8 @@ Click **"Open the demo course"** — *Fire Emergency Response: You Are There* �
 
 - **Block-based, no-code editor** — vertical stack of blocks per page, configured through forms (the Rise/Notion pattern, not a free canvas). Plain-language prompts: "What is happening?", "Where does that take them?", "How good a move is this?"
 - **Immersive scenario engine** — POV narrative scenes, described ambient sound (captions-first), timed decisions with an always-available *"I need more time"* pause, tools the learner can use anywhere (walkie-talkie, phone, torch…), flags/consequences, branching, quality-scored decisions, and an ending debrief that replays their choice path.
-- **Classic blocks** — text, image (alt text required or explicitly decorative), single-answer MCQ with per-option feedback, accordion (`<details>/<summary>`), keyboard-operable flip cards.
+- **Classic blocks** — text, image (alt text required or explicitly decorative), single-answer MCQ with per-option feedback, accordion (`<details>/<summary>`), keyboard-operable flip cards, and hotspots (explore-an-image with click-to-place authoring, ≥24 px keyboard-focusable targets, and a text-list alternative).
+- **Image uploads** — pick a file anywhere an image is used (image block, hotspot picture, scenario backgrounds); it's embedded as a data URI so exports stay fully self-contained.
 - **Live preview** — the preview renders the *actual* learner player component. What you preview is byte-for-byte what exports.
 - **Exports** (all generated in the browser, nothing to host):
   - **Standalone HTML** — one self-contained file; runs from a double-click, saves progress to localStorage.
@@ -55,7 +56,7 @@ One React renderer (src/player/) ──► editor live preview
 
 | Phase | What |
 |---|---|
-| Next | Media upload (embed images as data URIs), hotspot + drag-and-drop blocks (with non-drag alternatives), scenario meters (stress/time budget), sound effect hooks behind a captions-always toggle |
+| Next | Drag-and-drop block (with non-drag alternative), scenario meters (stress/time budget), sound effect hooks behind a captions-always toggle |
 | Then | SCORM 2004 export (64 KB suspend_data headroom), PDF export via print pipeline, SCORM Cloud + LMS test pass, themes |
 | Later | AI assist (draft-to-blocks, alt-text suggestions, distractor generation — always human-confirmed), xAPI/cmi5, collaboration, PDF/UA tagging |
 

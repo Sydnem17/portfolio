@@ -17,6 +17,7 @@ const BLOCK_MENU: { type: BlockType; name: string; blurb: string }[] = [
   { type: 'mcq', name: 'Question', blurb: 'Multiple choice with feedback on every answer.' },
   { type: 'accordion', name: 'Accordion', blurb: 'Tap-to-open sections for reference detail.' },
   { type: 'flipcards', name: 'Flip cards', blurb: 'Reveal cards for terms and concepts.' },
+  { type: 'hotspot', name: 'Hotspots', blurb: 'An image learners explore — click the spots, discover what’s there.' },
   { type: 'scenario', name: 'Immersive scenario', blurb: 'Put the learner IN the situation — POV story, timers, tools, branching choices.' },
 ];
 
@@ -41,6 +42,14 @@ function newBlock(type: BlockType): Block {
       return { type, id, items: [{ title: '', body: '' }] };
     case 'flipcards':
       return { type, id, cards: [{ front: '', back: '' }] };
+    case 'hotspot':
+      return {
+        type,
+        id,
+        prompt: '',
+        image: { src: '', alt: '' },
+        spots: [{ id: uid('h'), x: 50, y: 50, label: '', feedback: '' }],
+      };
     case 'scenario': {
       const start = uid('sc');
       const end = uid('sc');
@@ -194,6 +203,8 @@ export function App() {
         return `${b.items.length} section${b.items.length === 1 ? '' : 's'}`;
       case 'flipcards':
         return `${b.cards.length} card${b.cards.length === 1 ? '' : 's'}`;
+      case 'hotspot':
+        return b.prompt.slice(0, 40) || `${b.spots.length} spot${b.spots.length === 1 ? '' : 's'}`;
       case 'scenario':
         return b.title;
     }

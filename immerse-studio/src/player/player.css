@@ -526,3 +526,61 @@
     display: none;
   }
 }
+
+/* Hotspot */
+.ip-hotspot-prompt {
+  margin-top: 0;
+}
+.ip-hotspot-count {
+  color: var(--ip-muted);
+  font-weight: 400;
+}
+.ip-hotspot-stage {
+  position: relative;
+  display: block;
+  max-width: 640px;
+}
+.ip-hotspot-stage img {
+  width: 100%;
+  display: block;
+  border-radius: 6px;
+}
+.ip-spot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: var(--ip-accent);
+  color: #fff;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
+  display: grid;
+  place-items: center;
+}
+.ip-spot.is-found {
+  background: var(--ip-good);
+}
+.ip-spot.is-active {
+  outline: 3px solid #ffd166;
+  outline-offset: 2px;
+}
+.ip-hotspot-list {
+  margin-top: 0.8rem;
+}
+.ip-hotspot-list summary {
+  cursor: pointer;
+  color: var(--ip-muted);
+}
+.ip-hotspot-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0.4rem 0 0;
+}
+.ip-hotspot-list .ip-btn-ghost {
+  padding-left: 0;
+}
