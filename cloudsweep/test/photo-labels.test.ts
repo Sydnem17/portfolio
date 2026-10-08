@@ -35,21 +35,20 @@ describe("free browser AI → photo tags", () => {
     expect(toTags(det(["person", 0.9]), pred(["gown", 0.5])).event).toBeNull();
   });
 
-  it("does not invent pets from wild animals", () => {
+  it("files wild animals under their own type, not as pets", () => {
     const t = toTags(det(["elephant", 0.9]), pred(["African elephant, Loxodonta africana", 0.8]));
-    expect(t.pets).toEqual([]);
-    expect(t.things).toContain("elephant");
+    expect(t.pets).toEqual([{ species: "wildlife", description: "african elephant" }]);
+    expect(t.caption).toBe("An african elephant");
   });
 
   it("keeps wild animals out of Pets (the mix-ups from a real library)", () => {
     // Fox the detector called a cat, meerkat it called a dog, hippo it called a horse.
     const fox = toTags(det(["cat", 0.82]), pred(["red fox, Vulpes vulpes", 0.41], ["kit fox, Vulpes macrotis", 0.2]));
-    expect(fox.pets).toEqual([]);
-    expect(fox.things).toContain("red fox");
+    expect(fox.pets).toEqual([{ species: "wildlife", description: "red fox" }]);
     expect(fox.scene).toBe("wildlife");
     expect(fox.caption).toBe("A red fox");
-    expect(toTags(det(["dog", 0.7]), pred(["meerkat, mierkat", 0.55])).pets).toEqual([]);
-    expect(toTags(det(["horse", 0.9]), pred(["hippopotamus, hippo, river horse, Hippopotamus amphibius", 0.6])).pets).toEqual([]);
+    expect(toTags(det(["dog", 0.7]), pred(["meerkat, mierkat", 0.55])).pets).toEqual([{ species: "wildlife", description: "meerkat" }]);
+    expect(toTags(det(["horse", 0.9]), pred(["hippopotamus, hippo, river horse, Hippopotamus amphibius", 0.6])).pets).toEqual([{ species: "wildlife", description: "hippopotamus" }]);
     // A planet the detector thought was a bird, with nothing else agreeing.
     expect(toTags(det(["bird", 0.55]), pred(["planetarium", 0.2])).pets).toEqual([]);
   });

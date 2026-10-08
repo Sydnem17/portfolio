@@ -141,7 +141,7 @@ export async function photoCollections() {
       tagged,
       (r) => (r.pets ?? []).map((p: any) => `${p.species}|${p.description}`),
       (k) => cap(k.split("|")[1]),
-      (k, n) => `${cap(k.split("|")[0])} · ${n} photos`,
+      (k, n) => `${cap(k.split("|")[0])} · ${n} photo${n === 1 ? "" : "s"}`,
     ),
     people: collect(
       tagged,

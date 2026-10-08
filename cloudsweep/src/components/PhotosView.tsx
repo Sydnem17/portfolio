@@ -15,7 +15,7 @@ interface Data { total: number; analysed: number; located: number; gpsToCheck: n
 
 const TABS: Array<{ id: Tab; label: string; icon: string }> = [
   { id: "places", label: "Places", icon: "📍" },
-  { id: "pets", label: "Pets", icon: "🐾" },
+  { id: "pets", label: "Pets & animals", icon: "🐾" },
   { id: "people", label: "People", icon: "👥" },
   { id: "events", label: "Events", icon: "🎉" },
   { id: "scenes", label: "Scenes", icon: "🏞️" },

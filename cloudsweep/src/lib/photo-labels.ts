@@ -104,6 +104,9 @@ export function toTags(detections: Detection[], predictions: Prediction[]): Brow
     if (!match && (wild.length || bestScore < 0.75)) continue;
     pets.push({ species, description: match && match.probability >= BREED_CONFIDENCE ? breedName(match.className) : species });
   }
+  // Wild animals keep their own type ("meerkat", "red fox"), grouped under Pets & animals as wildlife.
+  const wildName = predictions.find((p) => p.probability >= 0.2 && wildAnimal(p.className));
+  if (wildName && !pets.length) pets.push({ species: "wildlife", description: wildAnimal(wildName.className)! });
   // A close-up pet often fills the frame, which the object detector can miss.
   const sure = predictions.find((p) => p.probability >= BREED_CONFIDENCE && petSpecies(p.className));
   if (sure && !pets.some((p) => p.species === petSpecies(sure.className))) pets.push({ species: petSpecies(sure.className)!, description: breedName(sure.className) });
@@ -114,10 +117,9 @@ export function toTags(detections: Detection[], predictions: Prediction[]): Brow
     if (scene) break;
   }
   scene ??= seen.map((d) => COCO_SCENES[d.class]).find(Boolean) ?? null;
-  if (!scene && !pets.length && predictions.some((p) => p.probability >= 0.25 && wildAnimal(p.className))) scene = "wildlife";
+  if (!scene && pets.some((p) => p.species === "wildlife")) scene = "wildlife";
 
   const things = new Set<string>();
-  for (const w of wild) things.add(w);
   for (const d of seen) if (!IGNORE_THINGS.has(d.class) && !COCO_PETS[d.class]) things.add(FRIENDLY_THING[d.class] ?? d.class);
   const best = predictions[0];
   if (best && best.probability >= 0.4 && !petSpecies(best.className) && !wildAnimal(best.className) && !SCENE_BY_NAME.has(short(best.className).toLowerCase())) things.add(short(best.className).toLowerCase());
@@ -132,7 +134,7 @@ export function toTags(detections: Detection[], predictions: Prediction[]): Brow
 
 function caption(people: number, pets: BrowserTags["pets"], scene: string | null, things: string[]): string {
   const who = people === 0 ? "" : people === 1 ? "A person" : people <= 4 ? `${people} people` : "A group of people";
-  const pet = pets.length ? pets.map((p) => `a ${p.description}`).join(" and ") : "";
+  const pet = pets.length ? pets.map((p) => `${/^[aeiou]/i.test(p.description) ? "an" : "a"} ${p.description}`).join(" and ") : "";
   const subject = who && pet ? `${who} with ${pet}` : who || (pet ? pet.charAt(0).toUpperCase() + pet.slice(1) : "") || (things[0] ? `A ${things[0]}` : "A photo");
   const where: Record<string, string> = {
     "beach & coast": "at the beach", "lakes & rivers": "by the water", mountains: "in the mountains", underwater: "underwater", snow: "in the snow",
