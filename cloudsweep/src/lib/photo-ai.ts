@@ -1,7 +1,7 @@
 "use client";
 
 import { runInBrowser } from "@/components/LocalScanManager";
-import { toTags, type BrowserTags } from "./photo-labels";
+import { GRAPHIC_TAGS, looksLikeGraphic, pixelStats, toTags, type BrowserTags } from "./photo-labels";
 
 /**
  * Free photo tagging that runs on this device. Two small open models (COCO-SSD for objects,
@@ -44,9 +44,21 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
-export async function tagPhoto(thumbUrl: string): Promise<BrowserTags> {
-  const m = await loadModels();
+/** Colour spread of a picture, measured on a tiny copy (cheap, and enough to tell flat graphics from photos). */
+function statsOf(img: HTMLImageElement) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 48;
+  const ctx = c.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return null;
+  ctx.drawImage(img, 0, 0, 48, 48);
+  return pixelStats(ctx.getImageData(0, 0, 48, 48).data);
+}
+
+export async function tagPhoto(thumbUrl: string, file: { name: string; mime?: string | null } = { name: "" }): Promise<BrowserTags> {
   const img = await loadImage(thumbUrl);
+  // Logos, designs and screenshots fool both models ("scissors", "cup"…), so file them as graphics.
+  if (looksLikeGraphic(file, statsOf(img))) return { ...GRAPHIC_TAGS };
+  const m = await loadModels();
   const [d, p] = await Promise.all([m.detect(img), m.classify(img)]);
   return toTags(d, p);
 }
@@ -66,14 +78,14 @@ export function startPhotoTagging(): boolean {
     let found = 0;
     for (;;) {
       const r = await fetch("/api/photos/untagged?limit=24").then((x) => x.json());
-      const ids: string[] = r.ids ?? [];
-      if (!ids.length) break;
+      const items: Array<{ id: string; name: string; mime: string | null }> = r.items ?? [];
+      if (!items.length) break;
       const total = done + r.remaining;
       const results: unknown[] = [];
-      for (const id of ids) {
+      for (const { id, name, mime } of items) {
         if (signal.aborted) throw new DOMException("Cancelled", "AbortError");
         try {
-          const t = await tagPhoto(`/api/thumb/${encodeURIComponent(id)}`);
+          const t = await tagPhoto(`/api/thumb/${encodeURIComponent(id)}`, { name, mime });
           if (t.pets.length || t.scene || t.event || t.people_count || t.things.length) found++;
           results.push({ id, ...t });
         } catch {

@@ -17,7 +17,7 @@ export async function getProgress() {
   const trash = await query<any>(
     `SELECT a.bytes, a.created_at, COALESCE(a.detail->>'reason', 'other') AS reason, a.account_id, acc.label, acc.provider, COALESCE(i.kind, 'other') AS kind
      FROM actions a LEFT JOIN accounts acc ON acc.id = a.account_id LEFT JOIN items i ON i.id = a.item_id
-     WHERE a.kind = 'trash' AND NOT a.undone`,
+     WHERE a.kind IN ('trash', 'purge') AND NOT a.undone`,
   );
   const counts = await query<{ kind: string; n: string; bytes: string }>(
     "SELECT kind, COUNT(*) AS n, COALESCE(SUM(bytes), 0) AS bytes FROM actions WHERE NOT undone GROUP BY kind",

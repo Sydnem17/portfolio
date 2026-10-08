@@ -30,5 +30,6 @@ export const local: StorageProvider = {
   move: inBrowser,
   rename: inBrowser,
   trash: inBrowser,
+  purge: inBrowser,
   restore: inBrowser,
 };

@@ -254,3 +254,9 @@ export async function renameFile(root: LDirHandle, path: string, newName: string
 export async function createFolder(root: LDirHandle, path: string): Promise<void> {
   await dirAt(root, segments(path), true);
 }
+
+/** Deletes a file for good (no staging). Used only when the person explicitly asks for permanent deletion. */
+export async function deleteFile(root: LDirHandle, path: string): Promise<void> {
+  const src = await resolveFile(root, path);
+  await src.dir.removeEntry(src.name);
+}

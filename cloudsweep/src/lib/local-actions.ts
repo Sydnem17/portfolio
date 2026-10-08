@@ -1,6 +1,6 @@
 "use client";
 
-import { createFolder, ensurePermission, moveToStaging, recallFolder, renameFile, restoreFromStaging, supportsLocalFolders } from "./local-client";
+import { createFolder, deleteFile, ensurePermission, moveToStaging, recallFolder, renameFile, restoreFromStaging, supportsLocalFolders } from "./local-client";
 
 /**
  * Moves local duplicates into "CloudSweep Staging" on their drive and records them on the server.
@@ -115,4 +115,42 @@ export async function createLocalFolder(accountId: string, path: string) {
   await createFolder(dir, path);
   const r = await fetch(`/api/local/${accountId}/folder`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path }) });
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? "Couldn't record the new folder");
+}
+
+/**
+ * Permanently deletes files on this computer, either straight away (itemIds with their paths) or from
+ * the CloudSweep Staging folder (actionIds with staged paths), then records it.
+ */
+export async function purgeLocalFiles(byAccount: Map<string, Array<{ itemId?: string; actionId?: number; path: string }>>, reason = "deleted") {
+  const result = { deleted: 0, failed: 0, problems: [] as string[] };
+  if (!supportsLocalFolders()) {
+    result.failed = [...byAccount.values()].reduce((n, l) => n + l.length, 0);
+    result.problems.push("Files on your computer can only be deleted from Chrome or Edge on that computer.");
+    return result;
+  }
+  for (const [accountId, files] of byAccount) {
+    const dir = await recallFolder(accountId);
+    if (!dir || !(await ensurePermission(dir))) {
+      result.failed += files.length;
+      result.problems.push("A local folder isn't available in this browser — open CloudSweep on the computer that has it.");
+      continue;
+    }
+    const itemIds: string[] = [];
+    const actionIds: number[] = [];
+    for (const f of files) {
+      try {
+        await deleteFile(dir, f.path);
+        if (f.actionId != null) actionIds.push(f.actionId);
+        else if (f.itemId) itemIds.push(f.itemId);
+      } catch {
+        result.failed++;
+      }
+    }
+    if (itemIds.length || actionIds.length) {
+      await fetch(`/api/local/${accountId}/purged`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ itemIds, actionIds, reason }) });
+      result.deleted += itemIds.length + actionIds.length;
+    }
+  }
+  if (result.failed && !result.problems.length) result.problems.push(`${result.failed} file(s) couldn't be deleted — they may have been moved or opened elsewhere.`);
+  return result;
 }

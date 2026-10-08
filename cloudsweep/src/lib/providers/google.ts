@@ -193,6 +193,12 @@ export const google: StorageProvider = {
     });
   },
 
+  async purge(ctx, remoteId) {
+    // Drive deletes permanently (bypassing the bin) for files in the bin and out of it.
+    await http(`${API}/files/${remoteId}`, { method: "DELETE", headers: bearer(await ctx.token()) });
+    return "deleted";
+  },
+
   async restore(ctx, remoteId) {
     await http(`${API}/files/${remoteId}`, {
       method: "PATCH",

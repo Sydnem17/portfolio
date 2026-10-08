@@ -30,7 +30,7 @@ function Bars({ rows }: { rows: Array<{ key: string; label: string; colour: stri
   );
 }
 
-const ACTION_TEXT: Record<string, string> = { trash: "Removed", copy: "Copied", move: "Moved", rename: "Renamed" };
+const ACTION_TEXT: Record<string, string> = { trash: "Removed", purge: "Deleted forever", copy: "Copied", move: "Moved", rename: "Renamed" };
 
 export default async function Progress() {
   const p = await getProgress();
@@ -115,7 +115,7 @@ export default async function Progress() {
                     </span>
                   </span>
                   <span className="shrink-0 text-right text-[12px] text-ink-muted">
-                    {a.bytes && a.kind === "trash" ? <b className="block text-ink">{bytes(a.bytes)}</b> : null}
+                    {a.bytes && (a.kind === "trash" || a.kind === "purge") ? <b className="block text-ink">{bytes(a.bytes)}</b> : null}
                     {ago(a.at)}
                   </span>
                 </li>

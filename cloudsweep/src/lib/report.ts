@@ -58,7 +58,7 @@ export async function getOverview() {
      ORDER BY i.size DESC LIMIT 12`,
   );
   const dupes = findDuplicates(await loadFiles());
-  const recovered = await query<any>("SELECT COALESCE(SUM(bytes),0) AS bytes, COUNT(*) AS n FROM actions WHERE kind = 'trash' AND NOT undone");
+  const recovered = await query<any>("SELECT COALESCE(SUM(bytes),0) AS bytes, COUNT(*) AS n FROM actions WHERE kind IN ('trash', 'purge') AND NOT undone");
   const photos = await query<any>(
     "SELECT COUNT(*) AS total, COUNT(t.item_id) AS analysed FROM items i LEFT JOIN photo_tags t ON t.item_id = i.id WHERE i.kind = 'image' AND NOT i.trashed",
   );

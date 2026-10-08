@@ -110,6 +110,12 @@ export interface StorageProvider {
   /** Renames in place. Must fail (not overwrite) if the folder already has that name. */
   rename(ctx: ProviderContext, remoteId: string, newName: string): Promise<void>;
   trash(ctx: ProviderContext, remoteId: string): Promise<void>;
+  /**
+   * Deletes permanently, skipping the provider's trash. Returns "trashed" when the provider doesn't let
+   * apps delete permanently (OneDrive personal, Dropbox Basic) and the file went to its recycle bin
+   * instead. `alreadyTrashed` = the file is in the provider's trash now (emptying from the Staging bin).
+   */
+  purge(ctx: ProviderContext, remoteId: string, alreadyTrashed: boolean): Promise<"deleted" | "trashed">;
   restore(ctx: ProviderContext, remoteId: string): Promise<void>;
 }
 

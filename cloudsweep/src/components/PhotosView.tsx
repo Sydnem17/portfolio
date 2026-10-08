@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
 import type { PhotoCollection } from "@/lib/photos/groups";
 import { announceJobs } from "./JobDock";
+import { SmartThumb } from "./SmartThumb";
 import { startPhotoTagging } from "@/lib/photo-ai";
 import { Lightbox, type PreviewItem } from "./Lightbox";
 import { buttonClass, Card, Empty, PageHeader } from "./ui";
@@ -128,8 +129,7 @@ export function PhotosView({ vision }: { vision: boolean }) {
             {list.map((c) => (
               <li key={c.key}>
                 <button onClick={() => setOpen(c.key)} className={`flex w-full items-center gap-3 rounded-xl p-2 text-left transition ${open === c.key ? "bg-ink text-white" : "hover:bg-white"}`}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={`/api/thumb/${encodeURIComponent(c.photos[0].id)}`} alt="" className="h-11 w-11 rounded-lg bg-slate-100 object-cover" />
+                  <SmartThumb id={c.photos[0].id} className="h-11 w-11 shrink-0 rounded-lg" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[14px] font-medium">{c.title}</span>
                     <span className={`text-[12px] ${open === c.key ? "text-white/60" : "text-ink-muted"}`}>{c.subtitle}</span>
@@ -143,11 +143,9 @@ export function PhotosView({ vision }: { vision: boolean }) {
         <div className="flex flex-wrap gap-6">
           {list.map((c) => (
             <button key={c.key} onClick={() => setOpen(c.key)} className="group w-28 text-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`/api/thumb/${encodeURIComponent(c.photos[0].id)}`}
-                alt=""
-                className={`mx-auto h-24 w-24 rounded-full bg-slate-100 object-cover ring-offset-4 transition group-hover:scale-105 ${open === c.key ? "ring-[3px] ring-brand" : "ring-1 ring-line"}`}
+              <SmartThumb
+                id={c.photos[0].id}
+                className={`mx-auto h-24 w-24 rounded-full ring-offset-4 transition group-hover:scale-105 ${open === c.key ? "ring-[3px] ring-brand" : "ring-1 ring-line"}`}
               />
               <span className="mt-3 block truncate text-[14px] font-medium">{c.title}</span>
               <span className="block text-[12px] text-ink-muted">{c.subtitle}</span>
@@ -160,8 +158,7 @@ export function PhotosView({ vision }: { vision: boolean }) {
             <button key={c.key} onClick={() => setOpen(c.key)} className={`overflow-hidden rounded-2xl border bg-white text-left transition hover:-translate-y-0.5 hover:shadow-md ${open === c.key ? "border-brand ring-2 ring-brand/20" : "border-line"}`}>
               <div className="grid aspect-[4/3] grid-cols-2 gap-0.5 bg-slate-100">
                 {c.photos.slice(0, 4).map((p) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={p.id} src={`/api/thumb/${encodeURIComponent(p.id)}`} alt="" loading="lazy" className="h-full w-full object-cover" />
+                  <SmartThumb key={p.id} id={p.id} className="h-full w-full" />
                 ))}
               </div>
               <div className="p-3">
@@ -184,8 +181,7 @@ export function PhotosView({ vision }: { vision: boolean }) {
           <div className="columns-2 gap-3 sm:columns-3 lg:columns-4">
             {current.photos.map((p, i) => (
               <button key={p.id} onClick={() => setPreview(i)} className="group relative mb-3 block w-full overflow-hidden rounded-xl bg-slate-100">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`/api/thumb/${encodeURIComponent(p.id)}`} alt={p.caption ?? p.name} loading="lazy" className="w-full transition duration-300 group-hover:scale-[1.03]" />
+                <SmartThumb id={p.id} alt={p.caption ?? p.name} className="aspect-square w-full transition duration-300 group-hover:scale-[1.03]" />
                 <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/60 to-transparent px-3 pb-2 pt-6 text-left text-[12px] text-white opacity-0 transition group-hover:opacity-100">
                   {p.caption ?? p.name} · {p.accountLabel}
                 </span>
