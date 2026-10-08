@@ -40,4 +40,26 @@ describe("free browser AI → photo tags", () => {
     expect(t.pets).toEqual([]);
     expect(t.things).toContain("elephant");
   });
+
+  it("keeps wild animals out of Pets (the mix-ups from a real library)", () => {
+    // Fox the detector called a cat, meerkat it called a dog, hippo it called a horse.
+    const fox = toTags(det(["cat", 0.82]), pred(["red fox, Vulpes vulpes", 0.41], ["kit fox, Vulpes macrotis", 0.2]));
+    expect(fox.pets).toEqual([]);
+    expect(fox.things).toContain("red fox");
+    expect(fox.scene).toBe("wildlife");
+    expect(fox.caption).toBe("A red fox");
+    expect(toTags(det(["dog", 0.7]), pred(["meerkat, mierkat", 0.55])).pets).toEqual([]);
+    expect(toTags(det(["horse", 0.9]), pred(["hippopotamus, hippo, river horse, Hippopotamus amphibius", 0.6])).pets).toEqual([]);
+    // A planet the detector thought was a bird, with nothing else agreeing.
+    expect(toTags(det(["bird", 0.55]), pred(["planetarium", 0.2])).pets).toEqual([]);
+  });
+
+  it("only names a breed when the classifier is confident, otherwise just the species", () => {
+    // Dachshunds aren't in the classifier's vocabulary, so its breed guesses are weak.
+    const sausage = toTags(det(["dog", 0.93]), pred(["Doberman, Doberman pinscher", 0.18], ["black-and-tan coonhound", 0.16]));
+    expect(sausage.pets).toEqual([{ species: "dog", description: "dog" }]);
+    // A very sure detector still counts a pet even when the classifier says nothing useful.
+    expect(toTags(det(["cat", 0.9]), pred(["window screen", 0.3])).pets).toEqual([{ species: "cat", description: "cat" }]);
+    expect(toTags(det(["bird", 0.8]), pred(["sulphur-crested cockatoo, Kakatoe galerita, Cacatua galerita", 0.62])).pets).toEqual([{ species: "bird", description: "sulphur-crested cockatoo" }]);
+  });
 });

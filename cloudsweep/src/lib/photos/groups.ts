@@ -1,5 +1,6 @@
 import "server-only";
 import { num, one, query } from "../db";
+import { NEEDS_BROWSER_TAGS } from "./browser-tags";
 
 export interface PhotoRef {
   id: string;
@@ -125,7 +126,7 @@ export async function photoCollections() {
     `SELECT COUNT(*) FILTER (WHERE i.lat IS NOT NULL) AS located,
             COUNT(*) FILTER (WHERE i.lat IS NULL AND NOT i.exif_checked AND a.provider NOT IN ('local', 'demo')) AS gps_to_check,
             COUNT(*) FILTER (WHERE i.phash IS NULL) AS lookalike_pending,
-            COUNT(*) FILTER (WHERE a.provider NOT IN ('demo', 'local') AND (t.item_id IS NULL OR t.tagged_by IS NULL)) AS to_tag
+            COUNT(*) FILTER (WHERE a.provider NOT IN ('demo', 'local') AND ${NEEDS_BROWSER_TAGS}) AS to_tag
      FROM items i JOIN accounts a ON a.id = i.account_id LEFT JOIN photo_tags t ON t.item_id = i.id WHERE i.kind = 'image' AND NOT i.trashed`,
   );
   return {
