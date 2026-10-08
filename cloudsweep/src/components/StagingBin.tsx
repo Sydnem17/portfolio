@@ -3,9 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ago, bytes, accountColour } from "@/lib/format";
+import { restoreLocalFiles } from "@/lib/local-actions";
 import { Badge, buttonClass, Card, Empty, Stat } from "./ui";
 
-interface Staged { id: number; name: string; bytes: number; path: string; reason: string; at: string; account: string; provider: string }
+interface Staged { id: number; name: string; bytes: number; path: string; stagedPath: string | null; reason: string; at: string; account: string; accountId: string; provider: string }
 interface Hist { id: number; kind: string; name: string; bytes: number; undone: boolean; at: string; account: string | null; to: string | null }
 
 const PURGE_DAYS = 30;
@@ -27,10 +28,23 @@ export function StagingBin({ items, history }: { items: Staged[]; history: Hist[
     return [...m.entries()];
   }, [items]);
 
-  async function restore(ids: number[]) {
+  async function restore(all: number[]) {
     setBusy(true);
     let restored = 0;
     const failed: string[] = [];
+    // Files on this computer are moved back by this browser; cloud files are restored by the server.
+    const local = new Map<string, Array<{ actionId: number; stagedPath: string; path: string }>>();
+    const ids: number[] = [];
+    for (const id of all) {
+      const it = items.find((x) => x.id === id);
+      if (it?.provider === "local" && it.stagedPath) local.get(it.accountId)?.push({ actionId: id, stagedPath: it.stagedPath, path: it.path }) ?? local.set(it.accountId, [{ actionId: id, stagedPath: it.stagedPath, path: it.path }]);
+      else ids.push(id);
+    }
+    if (local.size) {
+      const r = await restoreLocalFiles(local);
+      restored += r.restored;
+      if (r.failed) failed.push(`${r.failed} file(s) on a local drive couldn't be moved back from this browser — open CloudSweep in Chrome or Edge on that computer`);
+    }
     for (let i = 0; i < ids.length; i += 100) {
       const r = await fetch("/api/actions/restore", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: ids.slice(i, i + 100) }) }).then((x) => x.json());
       restored += r.restored ?? 0;
@@ -96,7 +110,11 @@ export function StagingBin({ items, history }: { items: Staged[]; history: Hist[
                       <p className="truncate font-medium">{i.name}</p>
                       <p className="truncate text-ink-muted">{i.account} · {i.path}</p>
                     </div>
-                    <Badge tone={left < 7 ? "warn" : "grey"}>{i.reason === "consolidated" ? "Moved" : "Duplicate"} · ~{left}d left</Badge>
+                    {i.provider === "local" ? (
+                      <Badge tone="grey">In CloudSweep Staging folder</Badge>
+                    ) : (
+                      <Badge tone={left < 7 ? "warn" : "grey"}>{i.reason === "consolidated" ? "Moved" : "Duplicate"} · ~{left}d left</Badge>
+                    )}
                     <span className="w-20 shrink-0 text-right">{bytes(i.bytes)}</span>
                     <button className="shrink-0 font-medium text-brand hover:underline disabled:opacity-40" disabled={busy} onClick={() => restore([i.id])}>
                       Restore

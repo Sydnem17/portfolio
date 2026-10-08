@@ -19,6 +19,7 @@ const GUESS: Record<string, string> = {
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   const it = await one<any>("SELECT i.account_id, i.remote_id, i.size, i.mime, i.name, a.provider FROM items i JOIN accounts a ON a.id = i.account_id WHERE i.id = $1", [params.id]);
   if (!it) return new Response("Not found", { status: 404 });
+  if (it.provider === "local") return new Response("This file is on your computer; open it from File Explorer.", { status: 409 });
   const size = num(it.size);
   if (!size) return new Response("Empty file", { status: 404 });
   const ext = String(it.name).toLowerCase().split(".").pop() ?? "";

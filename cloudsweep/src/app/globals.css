@@ -7,3 +7,6 @@ html, body { background: #F7F8FA; color: #0B0D12; }
 body { font-feature-settings: "cv11", "ss01"; -webkit-font-smoothing: antialiased; }
 ::selection { background: #2F5BFF; color: white; }
 input[type="checkbox"], input[type="radio"] { accent-color: #2F5BFF; }
+
+/* Calm, low-saturation basemap so photo bubbles carry the colour. */
+.cloudsweep-tiles { filter: grayscale(0.85) brightness(1.06) contrast(0.92); }

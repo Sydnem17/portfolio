@@ -34,9 +34,12 @@ export const GET = handler(async (req: Request) => {
      ORDER BY i.name LIMIT 1000`,
     [account, prefix, prefix.length + 1],
   );
+  const scan = await query<any>("SELECT progress FROM jobs WHERE account_id = $1 AND type = 'scan' AND status = 'running' ORDER BY created_at DESC LIMIT 1", [account]);
   return {
     folders: folders.map((f) => ({ name: f.name, path: `${path}/${f.name}`, files: num(f.files), bytes: num(f.bytes) })),
     files: files.map(mapFile),
+    // While a drive is still being scanned, its folders fill in progressively.
+    scanning: scan[0] ? { items: num(scan[0].progress?.done) } : null,
   };
 });
 

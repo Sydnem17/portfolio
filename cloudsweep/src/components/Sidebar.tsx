@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { BrandMark } from "./BrandMark";
 
 const NAV = [
   { href: "/", label: "Overview", icon: "M3 12h7V3H3v9Zm0 9h7v-6H3v6Zm11 0h7v-9h-7v9Zm0-18v6h7V3h-7Z" },
@@ -60,9 +61,11 @@ export function Sidebar() {
 function Logo() {
   return (
     <Link href="/" className="flex items-center gap-2.5">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/logo.svg" alt="" width={28} height={28} />
-      <span className="text-[16px] font-semibold tracking-tight">CloudSweep</span>
+      <BrandMark size={34} />
+      <span className="leading-tight">
+        <span className="block text-[16px] font-semibold tracking-tight">CloudSweep</span>
+        <span className="block text-[11px] font-medium uppercase tracking-[0.12em] text-ink-muted">by Harlem Hustle</span>
+      </span>
     </Link>
   );
 }

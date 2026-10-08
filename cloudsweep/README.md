@@ -132,6 +132,18 @@ Use the redirect URI pattern `{APP_URL}/api/oauth/{provider}` exactly. Consoles 
 
 Connect several accounts of the same service (e.g. personal **and** work Google) by clicking **Connect** again and choosing the other login. Accounts are auto-labelled Personal/Work by email domain; click a name to rename it.
 
+### Folders and drives on your computer (local, USB, NAS)
+Works in **Chrome or Edge on a computer** (Windows or Mac). Nothing to install.
+
+1. **Storage accounts → This computer → Add local folder or drive**, then pick a folder (e.g. `Pictures`), a USB drive (e.g. `E:\`) or a mapped NAS drive.
+   - **NAS:** first map it in Windows: **File Explorer → This PC → Map network drive**, choose a letter (e.g. `Z:`) and the NAS share. Then pick `Z:`.
+2. Click **View files** / **Allow** when Chrome asks for permission. CloudSweep needs edit access so it can move duplicates into a staging folder.
+3. Keep the tab open while it scans (the progress panel says so). It reads names, sizes and dates, then fingerprints only files that share a size with another file anywhere, using the same fingerprints Google and OneDrive use, so local files match cloud copies exactly.
+
+**Safety:** local duplicates are **moved into a `CloudSweep Staging` folder on the same drive**, never deleted. Restore them from the Staging bin, or empty that folder yourself when you're happy. **Privacy:** file contents never leave your computer.
+
+**Not yet:** copying local files up to the cloud in Consolidate, previews of local files, and look-alike matching for local photos.
+
 ---
 
 ## First clean-up: a recommended order

@@ -3,27 +3,52 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { bytes } from "@/lib/format";
+import type { LocalTask } from "./LocalScanManager";
 
 interface Job {
   id: string;
   type: string;
   status: string;
   account_id: string | null;
+  account_label?: string | null;
   progress: { done?: number; total?: number; message?: string; bytes?: number; errors?: number };
   error: string | null;
 }
 
 const TITLE: Record<string, string> = { scan: "Scanning", verify: "Verifying matches", analyse: "Analysing photos", transfer: "Consolidating", trash: "Cleaning up" };
+const MINIMISED_KEY = "cloudsweep:jobdock-minimised";
+
+const title = (j: Job) => `${TITLE[j.type] ?? j.type}${j.account_label ? ` ${j.account_label}` : ""}`;
+const pct = (j: Job) => (j.progress.total ? Math.min(100, Math.round(((j.progress.done ?? 0) / j.progress.total) * 100)) : null);
 
 /**
  * Drives running jobs one step at a time while the site is open, and shows live progress.
- * Pages announce new jobs with: window.dispatchEvent(new Event("cloudsweep:jobs")).
+ * Minimising only hides the panel; jobs keep running. Pages announce new jobs with
+ * window.dispatchEvent(new Event("cloudsweep:jobs")).
  */
 export function JobDock() {
   const router = useRouter();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [finished, setFinished] = useState<Job[]>([]);
+  const [minimised, setMinimised] = useState(false);
+  const [local, setLocal] = useState<LocalTask[]>([]);
   const busy = useRef(false);
+
+  useEffect(() => {
+    try {
+      setMinimised(localStorage.getItem(MINIMISED_KEY) === "1");
+    } catch {
+      /* storage unavailable: start expanded */
+    }
+  }, []);
+  const toggle = (value: boolean) => {
+    setMinimised(value);
+    try {
+      localStorage.setItem(MINIMISED_KEY, value ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  };
 
   const load = useCallback(async () => {
     const r = await fetch("/api/jobs").then((x) => (x.ok ? x.json() : { jobs: [] }));
@@ -31,8 +56,17 @@ export function JobDock() {
   }, []);
 
   useEffect(() => {
+    const onLocal = (e: Event) => setLocal((e as CustomEvent<LocalTask[]>).detail);
+    window.addEventListener("cloudsweep:local-progress", onLocal);
+    return () => window.removeEventListener("cloudsweep:local-progress", onLocal);
+  }, []);
+
+  useEffect(() => {
     load();
-    const on = () => load();
+    const on = () => {
+      toggle(false); // a newly started task should be visible
+      load();
+    };
     window.addEventListener("cloudsweep:jobs", on);
     return () => window.removeEventListener("cloudsweep:jobs", on);
   }, [load]);
@@ -44,7 +78,7 @@ export function JobDock() {
       const job = jobs[0];
       const r = await fetch(`/api/jobs/${job.id}/step`, { method: "POST" }).then((x) => x.json()).catch(() => null);
       busy.current = false;
-      const next: Job | null = r?.job ?? null;
+      const next: Job | null = r?.job ? { ...r.job, account_label: job.account_label } : null;
       if (!next || next.status !== "running") {
         if (next) setFinished((f) => [next, ...f].slice(0, 3));
         router.refresh();
@@ -58,48 +92,104 @@ export function JobDock() {
     })();
   }, [jobs, load, router]);
 
-  if (!jobs.length && !finished.length) return null;
+  const localRunning = local.filter((t) => t.phase === "listing" || t.phase === "fingerprinting");
+  const localDone = local.filter((t) => !localRunning.includes(t));
+  const running = jobs.length + localRunning.length;
+  if (!running && !finished.length && !localDone.length) return null;
+
+  if (minimised)
+    return (
+      <button
+        onClick={() => toggle(false)}
+        className="fixed bottom-4 right-4 z-40 flex items-center gap-2.5 rounded-full border border-line bg-white py-2 pl-3 pr-4 text-[13px] font-medium shadow-lg shadow-black/5 hover:bg-slate-50"
+        aria-label="Show background tasks"
+      >
+        {running ? (
+          <>
+            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand border-t-transparent" aria-hidden />
+            {running} task{running === 1 ? "" : "s"} running
+          </>
+        ) : (
+          <>
+            <span className={`h-2.5 w-2.5 rounded-full ${finished.some((f) => f.status === "failed") || localDone.some((t) => t.phase === "failed") ? "bg-bad" : "bg-good"}`} aria-hidden />
+            {finished.length + localDone.length} finished
+          </>
+        )}
+        <span className="text-ink-muted" aria-hidden>▴</span>
+      </button>
+    );
+
   return (
-    <div className="fixed bottom-4 right-4 z-40 w-[min(380px,calc(100vw-2rem))] space-y-2">
-      {jobs.map((j) => (
-        <div key={j.id} className="rounded-2xl border border-line bg-white p-4 shadow-lg shadow-black/5">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-[14px] font-semibold">{TITLE[j.type] ?? j.type}</p>
-            <button
-              className="text-[12px] text-ink-muted hover:text-bad"
-              onClick={async () => {
-                await fetch(`/api/jobs/${j.id}`, { method: "DELETE" });
-                load();
-              }}
-            >
-              Cancel
+    <div className="fixed bottom-4 right-4 z-40 w-[min(340px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-line bg-white shadow-lg shadow-black/10">
+      <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+        <p className="text-[13px] font-semibold">
+          {running ? `${running} task${running === 1 ? "" : "s"} running` : "Background tasks"}
+          {(jobs.some((j) => j.type === "scan") || localRunning.length > 0) && <span className="ml-2 font-normal text-good">🔒 metadata only</span>}
+        </p>
+        <button onClick={() => toggle(true)} className="rounded-lg px-2 py-0.5 text-[13px] text-ink-muted hover:bg-slate-100 hover:text-ink" aria-label="Minimise background tasks" title="Minimise (tasks keep running)">
+          ▾ Minimise
+        </button>
+      </div>
+      <ul className="max-h-[45vh] divide-y divide-line overflow-y-auto">
+        {jobs.map((j) => (
+          <li key={j.id} className="px-4 py-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="truncate text-[13px] font-medium">{title(j)}</p>
+              <button
+                className="shrink-0 text-[12px] text-ink-muted hover:text-bad"
+                onClick={async () => {
+                  await fetch(`/api/jobs/${j.id}`, { method: "DELETE" });
+                  load();
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+            <p className="mt-0.5 truncate text-[12px] text-ink-muted">
+              {j.progress.message ?? "Working…"}
+              {j.progress.bytes ? ` · ${bytes(j.progress.bytes)}` : ""}
+            </p>
+            <div className="mt-2 h-1 overflow-hidden rounded-full bg-slate-100">
+              {pct(j) !== null ? <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${pct(j)}%` }} /> : <div className="h-full w-1/3 animate-pulse rounded-full bg-brand" />}
+            </div>
+          </li>
+        ))}
+        {localRunning.map((t) => (
+          <li key={t.id} className="px-4 py-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="truncate text-[13px] font-medium">Scanning {t.label}</p>
+              <button className="shrink-0 text-[12px] text-ink-muted hover:text-bad" onClick={() => window.dispatchEvent(new CustomEvent("cloudsweep:local-cancel", { detail: t.id }))}>
+                Cancel
+              </button>
+            </div>
+            <p className="mt-0.5 truncate text-[12px] text-ink-muted">{t.message}</p>
+            <p className="mt-0.5 text-[11px] text-warn">Runs in this tab — keep it open until finished</p>
+            <div className="mt-2 h-1 overflow-hidden rounded-full bg-slate-100">
+              {t.total ? <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${Math.min(100, ((t.done ?? 0) / t.total) * 100)}%` }} /> : <div className="h-full w-1/3 animate-pulse rounded-full bg-brand" />}
+            </div>
+          </li>
+        ))}
+        {localDone.map((t) => (
+          <li key={t.id} className={`flex items-start justify-between gap-3 px-4 py-2.5 text-[12px] ${t.phase === "failed" ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"}`}>
+            <span>
+              <b>Scanning {t.label}</b> {t.phase === "failed" ? `failed: ${t.error}` : `— ${t.message}`}
+            </span>
+            <button onClick={() => window.dispatchEvent(new CustomEvent("cloudsweep:local-dismiss", { detail: t.id }))} aria-label="Dismiss">
+              ✕
             </button>
-          </div>
-          <p className="mt-0.5 truncate text-[13px] text-ink-muted">
-            {j.progress.message ?? "Working…"}
-            {j.progress.bytes ? ` · ${bytes(j.progress.bytes)}` : ""}
-          </p>
-          {j.type === "scan" && <p className="mt-1 text-[12px] text-good">🔒 Metadata only — no files are downloaded</p>}
-          {j.type === "verify" && <p className="mt-1 text-[12px] text-ink-muted">Reads only files that need a content check, then discards them</p>}
-          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
-            {j.progress.total ? (
-              <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${Math.min(100, ((j.progress.done ?? 0) / j.progress.total) * 100)}%` }} />
-            ) : (
-              <div className="h-full w-1/3 animate-pulse rounded-full bg-brand" />
-            )}
-          </div>
-        </div>
-      ))}
-      {finished.map((j) => (
-        <div key={j.id} className={`flex items-start justify-between gap-3 rounded-2xl border p-3 text-[13px] ${j.status === "failed" ? "border-red-200 bg-red-50 text-red-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
-          <span>
-            <b>{TITLE[j.type] ?? j.type}</b> {j.status === "failed" ? `failed: ${j.error}` : j.status === "cancelled" ? "cancelled" : `— ${j.progress.message ?? "done"}`}
-          </span>
-          <button onClick={() => setFinished((f) => f.filter((x) => x.id !== j.id))} aria-label="Dismiss">
-            ✕
-          </button>
-        </div>
-      ))}
+          </li>
+        ))}
+        {finished.map((j) => (
+          <li key={j.id} className={`flex items-start justify-between gap-3 px-4 py-2.5 text-[12px] ${j.status === "failed" ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"}`}>
+            <span>
+              <b>{title(j)}</b> {j.status === "failed" ? `failed: ${j.error}` : j.status === "cancelled" ? "cancelled" : `— ${j.progress.message ?? "done"}`}
+            </span>
+            <button onClick={() => setFinished((f) => f.filter((x) => x.id !== j.id))} aria-label="Dismiss">
+              ✕
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

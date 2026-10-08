@@ -4,7 +4,7 @@ import { contextFor, refreshQuota } from "./accounts";
 import { newId } from "./crypto";
 import { num, one, query } from "./db";
 import { findDuplicates } from "./dedupe";
-import { loadFiles, logAction, resolvePaths, upsertItems } from "./items";
+import { loadFiles, logAction, resolvePaths, resolvePathsIncremental, upsertItems } from "./items";
 import { dHash, toJpeg } from "./photos/phash";
 import { tagPhotos, visionEnabled } from "./photos/vision";
 import { getProvider } from "./providers";
@@ -26,6 +26,8 @@ export interface Job {
   cursor: any;
   progress: { done?: number; total?: number; message?: string; bytes?: number; errors?: number };
   error: string | null;
+  /** Name of the drive the job belongs to, when it belongs to one (listJobs only). */
+  account_label?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -47,7 +49,7 @@ export async function getJob(id: string): Promise<Job | null> {
 }
 
 export async function listJobs(limit = 30): Promise<Job[]> {
-  return query<Job>("SELECT * FROM jobs ORDER BY created_at DESC LIMIT $1", [limit]);
+  return query<Job>("SELECT j.*, a.label AS account_label FROM jobs j LEFT JOIN accounts a ON a.id = j.account_id ORDER BY j.created_at DESC LIMIT $1", [limit]);
 }
 
 export async function cancelJob(id: string) {
@@ -96,13 +98,17 @@ export async function runPendingSteps(maxMs = 50000): Promise<number> {
 const HANDLERS: Record<JobType, (job: Job, deadline: number) => Promise<void>> = {
   async scan(job, deadline) {
     const accountId = job.account_id!;
-    const provider = getProvider((await one<{ provider: string }>("SELECT provider FROM accounts WHERE id = $1", [accountId]))!.provider);
+    const providerId = (await one<{ provider: string }>("SELECT provider FROM accounts WHERE id = $1", [accountId]))!.provider;
+    // Local folders are scanned by the browser; a server-side scan would see nothing and wipe the index.
+    if (providerId === "local") throw new Error("Local folders are rescanned from the Storage accounts page in Chrome or Edge on that computer.");
+    const provider = getProvider(providerId);
     const ctx = await contextFor(accountId);
     const c = job.cursor ?? { next: null, started: false };
     let done = num(job.progress.done);
     do {
       const page = await provider.list(ctx, c.next);
       await upsertItems(accountId, page.items, job.id);
+      await resolvePathsIncremental(accountId);
       done += page.items.length;
       c.next = page.next;
       c.started = true;
@@ -126,7 +132,8 @@ const HANDLERS: Record<JobType, (job: Job, deadline: number) => Promise<void>> =
     if (!job.cursor) {
       // Queue every member of a "likely" group small enough to hash in one step.
       const groups = findDuplicates(await loadFiles()).filter((g) => g.confidence === "likely");
-      const ids = [...new Set(groups.flatMap((g) => g.members.filter((m) => !m.contentSha256 && m.size <= VERIFY_MAX_BYTES).map((m) => m.id)))];
+      // Local files are fingerprinted by the browser when scanned, so only cloud files need downloading here.
+      const ids = [...new Set(groups.flatMap((g) => g.members.filter((m) => m.provider !== "local" && !m.contentSha256 && m.size <= VERIFY_MAX_BYTES).map((m) => m.id)))];
       job.cursor = { ids, i: 0 };
       job.progress = { done: 0, total: ids.length, message: ids.length ? "Verifying file contents" : "Nothing needs verifying" };
     }
@@ -201,7 +208,8 @@ const HANDLERS: Record<JobType, (job: Job, deadline: number) => Promise<void>> =
     const ids: string[] = job.params.itemIds ?? [];
     while (c.i < ids.length && Date.now() < deadline) {
       const it = await one<any>("SELECT i.id, i.account_id, i.remote_id, i.name, i.size, i.path, a.provider FROM items i JOIN accounts a ON a.id = i.account_id WHERE i.id = $1 AND NOT i.trashed", [ids[c.i]]);
-      if (it) {
+      if (it?.provider === "local") c.errors++; // moved by the browser instead (see DuplicatesView)
+      else if (it) {
         try {
           await getProvider(it.provider).trash(await contextFor(it.account_id), it.remote_id);
           await query("UPDATE items SET trashed = TRUE WHERE id = $1", [it.id]);

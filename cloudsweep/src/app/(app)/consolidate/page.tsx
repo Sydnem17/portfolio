@@ -3,7 +3,8 @@ import { Empty, PageHeader } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
 
 export default async function Consolidate() {
-  const accounts = await listAccounts();
+  // Copying from or to folders on this computer is planned for a later update.
+  const accounts = (await listAccounts()).filter((a) => a.provider !== "local");
   if (accounts.length < 2)
     return (
       <>

@@ -50,6 +50,14 @@ export default function Privacy() {
           </ul>
         </Section>
 
+        <Section title="Folders and drives on your computer">
+          <p>
+            If you add a local folder, USB drive or mapped network drive, your browser reads it on your computer. Only file and folder names,
+            sizes, dates and fingerprints (checksums) are sent to the app; <b>file contents never leave your computer</b>. When you remove a local
+            duplicate, your browser moves it into a &ldquo;CloudSweep Staging&rdquo; folder on the same drive rather than deleting it.
+          </p>
+        </Section>
+
         <Section title="2. Google user data and permissions requested">
           <p>For Google Drive, the app requests these permissions:</p>
           <ul className="list-disc space-y-1.5 pl-5">

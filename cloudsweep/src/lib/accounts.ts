@@ -74,17 +74,26 @@ export async function saveConnectedAccount(providerId: string, tokens: OAuthToke
     await query("DELETE FROM accounts WHERE id = $1", [id]);
     return existing.id;
   }
-  const label = guessLabel(provider.name, p.email);
+  const label = await uniqueLabel(defaultLabel(provider.name, p.email), id);
   await query("UPDATE accounts SET email = $2, display_name = $3, quota_total = $4, quota_used = $5, label = $6 WHERE id = $1", [id, p.email, p.displayName, p.quotaTotal, p.quotaUsed, label]);
   await ensurePrimary();
   return id;
 }
 
-const PERSONAL_DOMAINS = ["gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com", "msn.com", "icloud.com", "me.com", "yahoo.com", "bigpond.com"];
-function guessLabel(name: string, email: string | null): string {
-  if (!email) return name;
-  const domain = email.split("@")[1]?.toLowerCase() ?? "";
-  return `${name} – ${PERSONAL_DOMAINS.includes(domain) ? "Personal" : "Work"}`;
+/** "Google Drive – sydnemradd": the login name keeps several accounts of one service apart. */
+function defaultLabel(name: string, email: string | null): string {
+  const who = email?.split("@")[0];
+  return who ? `${name} – ${who}` : name;
+}
+
+/** Appends " (2)", " (3)"… until no other account uses the name. */
+export async function uniqueLabel(base: string, excludeId?: string): Promise<string> {
+  const taken = new Set(
+    (await query<{ label: string }>("SELECT label FROM accounts WHERE id IS DISTINCT FROM $1", [excludeId ?? null])).map((r) => r.label.trim().toLowerCase()),
+  );
+  let label = base.trim().slice(0, 80);
+  for (let n = 2; taken.has(label.toLowerCase()); n++) label = `${base.trim().slice(0, 74)} (${n})`;
+  return label;
 }
 
 async function ensurePrimary() {
@@ -96,8 +105,15 @@ export async function setPrimary(id: string) {
   await query("UPDATE accounts SET is_primary = (id = $1)", [id]);
 }
 
-export async function renameAccount(id: string, label: string) {
-  await query("UPDATE accounts SET label = $2 WHERE id = $1", [id, label.slice(0, 80)]);
+/** Renames a storage account. Names must be non-empty and unique (ignoring case) so every drive can be told apart. */
+export async function renameAccount(id: string, label: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const name = label.replace(/\s+/g, " ").trim();
+  if (!name) return { ok: false, error: "Give the drive a name." };
+  if (name.length > 80) return { ok: false, error: "Keep the name under 80 characters." };
+  const clash = await one<{ id: string }>("SELECT id FROM accounts WHERE lower(label) = lower($1) AND id <> $2", [name, id]);
+  if (clash) return { ok: false, error: `Another drive is already called "${name}". Choose a different name.` };
+  await query("UPDATE accounts SET label = $2 WHERE id = $1", [id, name]);
+  return { ok: true };
 }
 
 export async function removeAccount(id: string) {

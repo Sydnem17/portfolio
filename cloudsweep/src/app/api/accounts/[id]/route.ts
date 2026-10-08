@@ -1,12 +1,16 @@
+import { NextResponse } from "next/server";
 import { z } from "zod";
 import { removeAccount, renameAccount, setPrimary } from "@/lib/accounts";
 import { handler } from "@/lib/api";
 
-const Patch = z.object({ label: z.string().min(1).max(80).optional(), primary: z.literal(true).optional() });
+const Patch = z.object({ label: z.string().max(200).optional(), primary: z.literal(true).optional() });
 
 export const PATCH = handler(async (req: Request, { params }: { params: { id: string } }) => {
   const body = Patch.parse(await req.json());
-  if (body.label) await renameAccount(params.id, body.label);
+  if (body.label !== undefined) {
+    const r = await renameAccount(params.id, body.label);
+    if (!r.ok) return NextResponse.json({ error: r.error }, { status: 400 });
+  }
   if (body.primary) await setPrimary(params.id);
   return { ok: true };
 });

@@ -6,7 +6,7 @@
  * To add a new service: implement StorageProvider in a new file and register it in ./index.ts.
  */
 
-export type ProviderId = "google" | "onedrive" | "dropbox" | "demo";
+export type ProviderId = "google" | "onedrive" | "dropbox" | "demo" | "local";
 
 export interface OAuthTokens {
   accessToken: string;

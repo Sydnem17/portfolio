@@ -41,9 +41,13 @@ const UNSUPPORTED_MIME = /^application\/vnd\.google-apps\./; // native Docs/Shee
 export async function buildPlan(p: ConsolidateParams): Promise<Plan> {
   const target = await getAccount(p.targetAccountId);
   if (!target) throw new Error("Target account not found");
-  const sources = p.sourceAccountIds.filter((id) => id !== p.targetAccountId);
+  if (target.provider === "local") throw new Error("Copying into a local folder isn't supported yet. Choose a cloud drive as the destination.");
+  // Uploading from local folders runs in the browser and is planned for a later update.
+  const localIds = new Set((await query<{ id: string }>("SELECT id FROM accounts WHERE provider = 'local'")).map((r) => r.id));
+  const sources = p.sourceAccountIds.filter((id) => id !== p.targetAccountId && !localIds.has(id));
   const prefix = p.pathPrefix?.trim() ? "/" + p.pathPrefix.trim().replace(/^\/+|\/+$/g, "") : null;
-  const files = (await loadFiles({ accountIds: sources, kinds: p.kinds?.length ? p.kinds : undefined })).filter(
+  // No eligible sources means nothing to move (an empty filter would otherwise mean "every drive").
+  const files = (sources.length ? await loadFiles({ accountIds: sources, kinds: p.kinds?.length ? p.kinds : undefined }) : []).filter(
     (f) => !prefix || f.path === prefix || f.path.startsWith(prefix + "/"),
   );
   const mimes = new Map(

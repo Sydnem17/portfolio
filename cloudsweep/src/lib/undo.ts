@@ -7,6 +7,7 @@ import { getProvider } from "./providers";
 export async function undoAction(id: number): Promise<void> {
   const a = await one<any>("SELECT a.*, acc.provider FROM actions a JOIN accounts acc ON acc.id = a.account_id WHERE a.id = $1 AND NOT a.undone", [id]);
   if (!a) throw new Error("Action not found or already undone");
+  if (a.provider === "local") throw new Error("Files on this computer are restored by your browser. Open the Staging bin in Chrome or Edge on that computer.");
   const provider = getProvider(a.provider);
   const ctx = await contextFor(a.account_id);
   if (a.kind === "trash") {

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ReviewMode } from "./ReviewMode";
+import { stageLocalFiles } from "@/lib/local-actions";
 import type { DuplicateGroup, FolderOverlap } from "@/lib/dedupe";
 import { bytes, date, KIND_LABEL, accountColour } from "@/lib/format";
 import { announceJobs } from "./JobDock";
@@ -29,6 +30,7 @@ export function DuplicatesView({ accounts }: { accounts: Array<{ id: string; lab
   const [shown, setShown] = useState(40);
   const [confirming, setConfirming] = useState(false);
   const [reviewing, setReviewing] = useState<number | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const p = new URLSearchParams(Object.entries(filters).filter(([, v]) => v) as [string, string][]);
@@ -49,11 +51,13 @@ export function DuplicatesView({ accounts }: { accounts: Array<{ id: string; lab
     return () => window.removeEventListener("cloudsweep:changed", on);
   }, [load]);
 
-  const sizeOf = useMemo(() => {
-    const m = new Map<string, number>();
-    report?.groups.forEach((g) => g.members.forEach((x) => m.set(x.id, x.size)));
+  const memberById = useMemo(() => {
+    const m = new Map<string, DuplicateGroup["members"][number]>();
+    report?.groups.forEach((g) => g.members.forEach((x) => m.set(x.id, x)));
     return m;
   }, [report]);
+  const sizeOf = useMemo(() => new Map([...memberById].map(([id, x]) => [id, x.size])), [memberById]);
+  const selectedLocal = [...selected].filter((id) => memberById.get(id)?.provider === "local").length;
   const selectedBytes = [...selected].reduce((s, id) => s + (sizeOf.get(id) ?? 0), 0);
 
   const keeperOf = (g: DuplicateGroup) => keep[g.key] ?? g.keeperId;
@@ -72,9 +76,27 @@ export function DuplicatesView({ accounts }: { accounts: Array<{ id: string; lab
   };
 
   async function trash() {
-    await fetch("/api/trash", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ itemIds: [...selected], reason: "duplicate" }) });
+    const ids = [...selected];
+    const local = new Map<string, Array<{ id: string; path: string }>>();
+    const cloud: string[] = [];
+    for (const id of ids) {
+      const m = memberById.get(id);
+      if (m?.provider === "local") local.get(m.accountId)?.push({ id, path: m.path }) ?? local.set(m.accountId, [{ id, path: m.path }]);
+      else cloud.push(id);
+    }
     setConfirming(false);
-    announceJobs();
+    // Local files are moved by this browser into "CloudSweep Staging" on their own drive.
+    if (local.size) {
+      setNotice("Moving files on this computer into the staging folder…");
+      const r = await stageLocalFiles(local);
+      setNotice(r.failed ? `${r.moved} local file(s) moved to the staging folder. ${r.problems.join(" ")}` : `${r.moved} local file(s) moved to the “CloudSweep Staging” folder on their drive.`);
+    }
+    if (cloud.length) {
+      await fetch("/api/trash", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ itemIds: cloud, reason: "duplicate" }) });
+      announceJobs();
+    }
+    setSelected(new Set());
+    load();
   }
 
   async function verify() {
@@ -116,6 +138,13 @@ export function DuplicatesView({ accounts }: { accounts: Array<{ id: string; lab
         <Stat label="Need a quick check" value={s.likely.groups.toLocaleString()} hint={bytes(s.likely.bytes)} />
         <Stat label="Look-alike photos" value={s.similar.groups.toLocaleString()} hint={bytes(s.similar.bytes)} />
       </div>
+
+      {notice && (
+        <div className="mt-6 flex items-start justify-between gap-3 rounded-xl border border-line bg-white px-4 py-3 text-[14px]">
+          <span>{notice}</span>
+          <button onClick={() => setNotice(null)} aria-label="Dismiss" className="text-ink-muted">✕</button>
+        </div>
+      )}
 
       {report.folders.length > 0 && (
         <Card className="mt-6">
@@ -277,7 +306,7 @@ export function DuplicatesView({ accounts }: { accounts: Array<{ id: string; lab
       {selected.size > 0 && (
         <div className="fixed bottom-4 left-1/2 z-30 flex w-[min(640px,calc(100vw-2rem))] -translate-x-1/2 items-center justify-between gap-3 rounded-2xl bg-ink px-5 py-3.5 text-white shadow-2xl lg:left-[calc(50%+8rem)]">
           <p className="text-[14px]">
-            <b>{selected.size.toLocaleString()}</b> files selected · frees <b>{bytes(selectedBytes)}</b>
+            <b>{selected.size.toLocaleString()}</b> {selected.size === 1 ? "file" : "files"} selected · frees <b>{bytes(selectedBytes)}</b>
           </p>
           <div className="flex gap-2">
             <button className="rounded-xl px-3 py-2 text-[13px] text-white/70 hover:text-white" onClick={() => setSelected(new Set())}>
@@ -309,11 +338,16 @@ export function DuplicatesView({ accounts }: { accounts: Array<{ id: string; lab
       {confirming && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true">
           <div className="w-full max-w-md rounded-2xl bg-white p-6">
-            <h2 className="text-[18px] font-semibold">Move {selected.size.toLocaleString()} files to trash?</h2>
+            <h2 className="text-[18px] font-semibold">Move {selected.size.toLocaleString()} {selected.size === 1 ? "file" : "files"} to trash?</h2>
             <ul className="mt-3 space-y-1.5 text-[14px] text-ink-soft">
               <li>• Frees about <b>{bytes(selectedBytes)}</b> once each provider empties its trash.</li>
               <li>• One copy of every file stays where you chose to keep it.</li>
               <li>• Files go to the cross-cloud Staging bin first — restore any of them in one click, or from the provider’s own trash for at least 30 days.</li>
+              {selectedLocal > 0 && (
+                <li>
+                  • <b>{selectedLocal.toLocaleString()}</b> of these are on this computer. They&apos;ll be moved into a <b>CloudSweep Staging</b> folder on the same drive (not deleted) — empty it yourself once you&apos;re happy. Your browser may ask for permission.
+                </li>
+              )}
             </ul>
             <div className="mt-6 flex justify-end gap-2">
               <button className={buttonClass("ghost")} onClick={() => setConfirming(false)}>Cancel</button>

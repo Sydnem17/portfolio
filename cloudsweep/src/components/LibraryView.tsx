@@ -12,7 +12,7 @@ interface Account { id: string; label: string; provider: string }
 export function LibraryView({ accounts }: { accounts: Account[] }) {
   const [loc, setLoc] = useState<{ account: string; path: string } | null>(accounts[0] ? { account: accounts[0].id, path: "/" } : null);
   const [q, setQ] = useState("");
-  const [data, setData] = useState<{ folders: Folder[]; files: File[] } | null>(null);
+  const [data, setData] = useState<{ folders: Folder[]; files: File[]; scanning?: { items: number } | null } | null>(null);
   const [view, setView] = useState<"list" | "grid">("list");
   const [preview, setPreview] = useState<number | null>(null);
 
@@ -62,6 +62,15 @@ export function LibraryView({ accounts }: { accounts: Account[] }) {
             </p>
           )}
           {q && <p className="mb-4 text-[14px] text-ink-muted">{data?.files.length ?? 0} matches across all drives</p>}
+          {!q && data?.scanning && (
+            <div className="mb-4 flex items-center gap-3 rounded-xl border border-brand/20 bg-brand-soft px-4 py-3 text-[13px] text-ink-soft">
+              <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-brand border-t-transparent" aria-hidden />
+              <span>
+                <b>Still scanning this drive</b> — {data.scanning.items.toLocaleString()} items read so far. Folders appear here as they&apos;re indexed;
+                anything missing will show once the scan finishes.
+              </span>
+            </div>
+          )}
 
           {!data ? (
             <div className="h-40 animate-pulse rounded-2xl bg-slate-100" />
@@ -115,7 +124,9 @@ export function LibraryView({ accounts }: { accounts: Account[] }) {
                   ))}
                 </tbody>
               </table>
-              {!data.folders.length && !data.files.length && <p className="p-8 text-center text-[14px] text-ink-muted">This folder is empty.</p>}
+              {!data.folders.length && !data.files.length && (
+                <p className="p-8 text-center text-[14px] text-ink-muted">{data.scanning ? "Nothing indexed in this folder yet — the scan is still running." : "This folder is empty."}</p>
+              )}
             </div>
           )}
         </section>
