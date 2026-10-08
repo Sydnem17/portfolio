@@ -166,6 +166,11 @@ export const demo: StorageProvider = {
     await save(ctx.accountId, { ...f, parentRemoteId: newParentId });
   },
 
+  async rename(ctx, remoteId, newName) {
+    const f = await getFile(ctx.accountId, remoteId);
+    await save(ctx.accountId, { ...f, name: newName });
+  },
+
   async trash(ctx, remoteId) {
     const f = await getFile(ctx.accountId, remoteId);
     await save(ctx.accountId, { ...f, trashed: true });

@@ -16,6 +16,11 @@ export async function undoAction(id: number): Promise<void> {
   } else if (a.kind === "copy") {
     await provider.trash(ctx, a.remote_id);
     await query("UPDATE items SET trashed = TRUE WHERE id = $1", [a.item_id]);
+  } else if (a.kind === "rename") {
+    await provider.rename(ctx, a.remote_id, a.detail.from);
+    const it = await one<{ path: string | null }>("SELECT path FROM items WHERE id = $1", [a.item_id]);
+    const path = it?.path ? `${it.path.slice(0, it.path.lastIndexOf("/"))}/${a.detail.from}` : null;
+    await query("UPDATE items SET name = $2, path = COALESCE($3, path) WHERE id = $1", [a.item_id, a.detail.from, path]);
   } else {
     throw new Error(`Cannot undo ${a.kind}`);
   }

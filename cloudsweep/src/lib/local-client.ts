@@ -241,3 +241,16 @@ export async function restoreFromStaging(root: LDirHandle, stagedPath: string, o
   await moveFile(src, destDir, destName);
   return `/${[...parts, destName].join("/")}`;
 }
+
+/** Renames a file in place. Refuses rather than overwriting when the new name is already taken. */
+export async function renameFile(root: LDirHandle, path: string, newName: string): Promise<void> {
+  const src = await resolveFile(root, path);
+  if (src.name === newName) return;
+  if (src.name.toLowerCase() !== newName.toLowerCase() && (await exists(src.dir, newName))) throw new Error(`“${newName}” already exists`);
+  await moveFile(src, src.dir, newName);
+}
+
+/** Creates a folder (and any missing parents) inside the picked folder. */
+export async function createFolder(root: LDirHandle, path: string): Promise<void> {
+  await dirAt(root, segments(path), true);
+}

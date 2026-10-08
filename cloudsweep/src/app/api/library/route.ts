@@ -23,9 +23,11 @@ export const GET = handler(async (req: Request) => {
   const path = (u.get("path") ?? "/").replace(/\/+$/, "");
   const prefix = `${path}/`;
   const folders = await query<any>(
-    `SELECT split_part(substr(path, $3), '/', 1) AS name, COUNT(*) AS files, COALESCE(SUM(size), 0) AS bytes
-     FROM items WHERE account_id = $1 AND NOT is_folder AND NOT trashed AND starts_with(path, $2) AND strpos(substr(path, $3), '/') > 0
-     GROUP BY 1 ORDER BY 1`,
+    // Folders come from the files inside them, plus folder entries themselves so empty folders show too.
+    `SELECT split_part(substr(path, $3), '/', 1) AS name, COUNT(*) FILTER (WHERE NOT is_folder) AS files,
+            COALESCE(SUM(size) FILTER (WHERE NOT is_folder), 0) AS bytes
+     FROM items WHERE account_id = $1 AND NOT trashed AND starts_with(path, $2) AND (strpos(substr(path, $3), '/') > 0 OR is_folder)
+     GROUP BY 1 HAVING split_part(substr(path, $3), '/', 1) <> '' ORDER BY lower(split_part(substr(path, $3), '/', 1))`,
     [account, prefix, prefix.length + 1],
   );
   const files = await query<any>(

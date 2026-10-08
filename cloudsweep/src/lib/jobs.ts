@@ -15,7 +15,7 @@ import { demoTagsFor } from "./providers/demo";
  * a cursor, so long operations survive serverless time limits, browser tabs closing and redeploys.
  * The browser drives steps while a page is open; /api/cron drives them in the background.
  */
-export type JobType = "scan" | "verify" | "analyse" | "transfer" | "trash";
+export type JobType = "scan" | "verify" | "analyse" | "transfer" | "trash" | "rename";
 
 export interface Job {
   id: string;
@@ -38,7 +38,7 @@ export const VERIFY_MAX_BYTES = 150 * 1024 * 1024;
 export async function createJob(type: JobType, accountId: string | null, params: object = {}, progress: object = {}): Promise<string> {
   // One active job per type+account: return the existing one instead of racing it.
   const existing = await one<{ id: string }>("SELECT id FROM jobs WHERE type = $1 AND account_id IS NOT DISTINCT FROM $2 AND status = 'running'", [type, accountId]);
-  if (existing && type !== "transfer" && type !== "trash") return existing.id;
+  if (existing && type !== "transfer" && type !== "trash" && type !== "rename") return existing.id;
   const id = newId("job");
   await query("INSERT INTO jobs (id, type, account_id, params, progress) VALUES ($1,$2,$3,$4,$5)", [id, type, accountId, JSON.stringify(params), JSON.stringify(progress)]);
   return id;
@@ -226,6 +226,42 @@ const HANDLERS: Record<JobType, (job: Job, deadline: number) => Promise<void>> =
       await save(job, { status: "done" });
       for (const a of new Set((await query<{ account_id: string }>("SELECT DISTINCT account_id FROM items WHERE id = ANY($1)", [ids])).map((r) => r.account_id)))
         await refreshQuota(a).catch(() => undefined);
+    }
+  },
+
+  async rename(job, deadline) {
+    const c = (job.cursor ??= { i: 0, errors: 0, firstError: null as string | null });
+    const list: Array<{ id: string; newName: string }> = job.params.renames ?? [];
+    const contexts = new Map<string, Awaited<ReturnType<typeof contextFor>>>();
+    while (c.i < list.length && Date.now() < deadline) {
+      const r = list[c.i];
+      const it = await one<any>("SELECT i.id, i.account_id, i.remote_id, i.name, i.path, a.provider FROM items i JOIN accounts a ON a.id = i.account_id WHERE i.id = $1 AND NOT i.trashed", [r.id]);
+      if (!it || it.provider === "local") c.errors++; // local files are renamed by the browser
+      else if (it.name !== r.newName) {
+        try {
+          if (!contexts.has(it.account_id)) contexts.set(it.account_id, await contextFor(it.account_id));
+          await getProvider(it.provider).rename(contexts.get(it.account_id)!, it.remote_id, r.newName);
+          const path = `${String(it.path ?? "/" + it.name).slice(0, String(it.path ?? "/" + it.name).lastIndexOf("/"))}/${r.newName}`;
+          await query("UPDATE items SET name = $2, path = $3, updated_at = now() WHERE id = $1", [it.id, r.newName, path]);
+          if (job.params.undoOf) {
+            await query("UPDATE actions SET undone = TRUE WHERE kind = 'rename' AND item_id = $1 AND detail->>'batch' = $2", [it.id, job.params.undoOf]);
+          } else {
+            await logAction({ kind: "rename", accountId: it.account_id, itemId: it.id, remoteId: it.remote_id, name: r.newName, detail: { from: it.name, to: r.newName, path, batch: job.params.batch } });
+          }
+        } catch (err) {
+          c.errors++;
+          c.firstError ??= `${it.name}: ${(err as Error).message}`.slice(0, 300);
+        }
+      }
+      c.i++;
+      job.progress = { done: c.i, total: list.length, errors: c.errors, message: `${job.params.undoOf ? "Undoing" : "Renamed"} ${c.i} of ${list.length}` };
+    }
+    if (c.i >= list.length) {
+      const ok = list.length - c.errors;
+      job.progress.message = job.params.undoOf
+        ? `Put back ${ok} original name${ok === 1 ? "" : "s"}`
+        : `Renamed ${ok} file${ok === 1 ? "" : "s"}${c.errors ? ` · ${c.errors} couldn't be renamed${c.firstError ? ` (${c.firstError})` : ""}` : ""}`;
+      await save(job, { status: "done" });
     }
   },
 

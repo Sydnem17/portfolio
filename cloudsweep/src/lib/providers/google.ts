@@ -177,6 +177,14 @@ export const google: StorageProvider = {
     await http(`${API}/files/${remoteId}?${p}`, { method: "PATCH", headers: bearer(token, { "Content-Type": "application/json" }), body: "{}" });
   },
 
+  async rename(ctx, remoteId, newName) {
+    await http(`${API}/files/${remoteId}`, {
+      method: "PATCH",
+      headers: bearer(await ctx.token(), { "Content-Type": "application/json" }),
+      body: JSON.stringify({ name: newName }),
+    });
+  },
+
   async trash(ctx, remoteId) {
     await http(`${API}/files/${remoteId}`, {
       method: "PATCH",

@@ -55,11 +55,13 @@ export default async function Overview() {
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <Stat label="Stored across all drives" value={bytes(o.totalBytes)} hint={`${o.totalFiles.toLocaleString()} files`} />
         <Stat label="Wasted on duplicates" value={bytes(o.duplicateWaste)} tone="bad" hint={`${o.duplicateGroups.toLocaleString()} duplicate sets`} />
-        <Stat label="Recovered so far" value={bytes(o.recoveredBytes)} tone="good" hint={`${o.actions} files cleaned up`} />
+        <Link href="/progress" className="block rounded-2xl transition hover:ring-2 hover:ring-good/30">
+          <Stat label="Recovered so far" value={bytes(o.recoveredBytes)} tone="good" hint={<>{o.actions} files cleaned up · <span className="underline">See progress</span></>} />
+        </Link>
         <Stat label="Photos understood" value={`${o.photos.total ? Math.round((o.photos.analysed / o.photos.total) * 100) : 0}%`} tone="brand" hint={`${o.photos.analysed.toLocaleString()} of ${o.photos.total.toLocaleString()} photos`} />
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-5">
+      <div className="mt-6 grid gap-6 lg:grid-cols-5 [&>*]:min-w-0">
         <Card className="lg:col-span-3">
           <CardTitle aside={<Link href="/accounts" className="text-[13px] font-medium text-brand">Manage</Link>}>Your drives</CardTitle>
           <ul className="space-y-5">
@@ -109,7 +111,7 @@ export default async function Overview() {
         </Card>
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+      <div className="mt-6 grid gap-6 lg:grid-cols-2 [&>*]:min-w-0">
         <Card>
           <CardTitle aside={<Link href="/duplicates" className="text-[13px] font-medium text-brand">See all</Link>}>Biggest wins</CardTitle>
           {o.topGroups.length ? (

@@ -107,6 +107,8 @@ export interface StorageProvider {
   ): Promise<CloudItem | null>;
 
   move(ctx: ProviderContext, remoteId: string, newParentId: string): Promise<void>;
+  /** Renames in place. Must fail (not overwrite) if the folder already has that name. */
+  rename(ctx: ProviderContext, remoteId: string, newName: string): Promise<void>;
   trash(ctx: ProviderContext, remoteId: string): Promise<void>;
   restore(ctx: ProviderContext, remoteId: string): Promise<void>;
 }

@@ -164,6 +164,13 @@ export const dropbox: StorageProvider = {
     await post(`${API}/files/move_v2`, token, { from_path: remoteId, to_path: `${newParentId}/${meta.name}`, autorename: true });
   },
 
+  async rename(ctx, remoteId, newName) {
+    const token = await ctx.token();
+    const meta = await post(`${API}/files/get_metadata`, token, { path: remoteId });
+    const parent = String(meta.path_display).split("/").slice(0, -1).join("/");
+    await post(`${API}/files/move_v2`, token, { from_path: remoteId, to_path: `${parent}/${newName}`, autorename: false });
+  },
+
   async trash(ctx, remoteId) {
     // Deleted files stay recoverable from Dropbox's "Deleted files" view (30–180 days by plan).
     await post(`${API}/files/delete_v2`, await ctx.token(), { path: remoteId });
