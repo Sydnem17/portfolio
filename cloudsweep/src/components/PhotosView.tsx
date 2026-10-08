@@ -1,0 +1,179 @@
+"use client";
+
+import dynamic from "next/dynamic";
+import { useCallback, useEffect, useState } from "react";
+import type { PhotoCollection } from "@/lib/photos/groups";
+import { announceJobs } from "./JobDock";
+import { Lightbox, type PreviewItem } from "./Lightbox";
+import { buttonClass, Card, Empty, PageHeader } from "./ui";
+
+const PlaceMap = dynamic(() => import("./PlaceMap").then((m) => m.PlaceMap), { ssr: false, loading: () => <div className="h-[380px] animate-pulse rounded-2xl bg-slate-100" /> });
+
+type Tab = "places" | "pets" | "people" | "events" | "scenes" | "things";
+interface Data { total: number; analysed: number; places: PhotoCollection[]; pets: PhotoCollection[]; people: PhotoCollection[]; events: PhotoCollection[]; scenes: PhotoCollection[]; things: PhotoCollection[] }
+
+const TABS: Array<{ id: Tab; label: string; icon: string }> = [
+  { id: "places", label: "Places", icon: "📍" },
+  { id: "pets", label: "Pets", icon: "🐾" },
+  { id: "people", label: "People", icon: "👥" },
+  { id: "events", label: "Events", icon: "🎉" },
+  { id: "scenes", label: "Scenes", icon: "🏞️" },
+  { id: "things", label: "Things", icon: "🔎" },
+];
+
+export function PhotosView({ vision }: { vision: boolean }) {
+  const [data, setData] = useState<Data | null>(null);
+  const [tab, setTab] = useState<Tab>("places");
+  const [open, setOpen] = useState<string | null>(null);
+  const [preview, setPreview] = useState<number | null>(null);
+
+  const load = useCallback(() => fetch("/api/photos").then((r) => r.json()).then(setData), []);
+  useEffect(() => {
+    load();
+    window.addEventListener("cloudsweep:changed", load);
+    return () => window.removeEventListener("cloudsweep:changed", load);
+  }, [load]);
+  useEffect(() => setOpen(null), [tab]);
+  const select = useCallback((k: string) => setOpen(k), []);
+
+  if (!data) return <PageHeader title="Photos" intro="Gathering your photos from every drive…" />;
+  if (!data.total)
+    return (
+      <>
+        <PageHeader title="Photos" />
+        <Empty title="No photos indexed yet" body="Connect a drive (or load the demo library) and CloudSweep will gather every photo into one browsable collection." />
+      </>
+    );
+
+  const list = data[tab];
+  const current = list.find((c) => c.key === open) ?? null;
+  const items: PreviewItem[] = (current?.photos ?? []).map((p) => ({ id: p.id, name: p.name, kind: "image", accountLabel: p.accountLabel, takenAt: p.takenAt, caption: p.caption }));
+  const pending = data.total - data.analysed;
+
+  return (
+    <>
+      <PageHeader
+        title="Photos"
+        intro={`${data.total.toLocaleString()} photos from every drive, organised by where they were taken and what's in them.`}
+        actions={
+          pending > 0 && (
+            <button
+              className={buttonClass("brand")}
+              onClick={async () => {
+                await fetch("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "analyse" }) });
+                announceJobs();
+              }}
+            >
+              ✦ Analyse {pending.toLocaleString()} photo{pending === 1 ? "" : "s"}
+            </button>
+          )
+        }
+      />
+      {!vision && (
+        <div className="mb-6 rounded-xl border border-line bg-white px-4 py-3 text-[13px] text-ink-muted">
+          Places and look-alike detection work now. Add an <b>ANTHROPIC_API_KEY</b> to unlock pets, events, scenes and things for your real photos (demo photos are pre-tagged).
+        </div>
+      )}
+
+      <div className="mb-6 flex gap-2 overflow-x-auto pb-1" role="tablist">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={tab === t.id}
+            onClick={() => setTab(t.id)}
+            className={`flex shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-[14px] font-medium transition ${tab === t.id ? "border-ink bg-ink text-white" : "border-line bg-white text-ink-soft hover:border-ink/30"}`}
+          >
+            <span aria-hidden>{t.icon}</span>
+            {t.label}
+            <span className={`text-[12px] ${tab === t.id ? "text-white/60" : "text-ink-muted"}`}>{data[t.id].length}</span>
+          </button>
+        ))}
+      </div>
+
+      {tab === "people" && (
+        <p className="-mt-2 mb-5 text-[13px] text-ink-muted">
+          Grouped by how many people are in frame. Recognising <i>who</i> is in a photo needs face recognition, which is an opt-in feature coming next — it stays off until you enable it.
+        </p>
+      )}
+
+      {list.length === 0 ? (
+        <Empty title={`No ${tab} found yet`} body={data.analysed < data.total ? "Run “Analyse photos” to let CloudSweep look inside your pictures." : "Nothing matched this category in your library."} />
+      ) : tab === "places" ? (
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+          <PlaceMap places={list} selected={open} onSelect={select} />
+          <ul className="max-h-[380px] space-y-1 overflow-y-auto pr-1">
+            {list.map((c) => (
+              <li key={c.key}>
+                <button onClick={() => setOpen(c.key)} className={`flex w-full items-center gap-3 rounded-xl p-2 text-left transition ${open === c.key ? "bg-ink text-white" : "hover:bg-white"}`}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={`/api/thumb/${encodeURIComponent(c.photos[0].id)}`} alt="" className="h-11 w-11 rounded-lg bg-slate-100 object-cover" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14px] font-medium">{c.title}</span>
+                    <span className={`text-[12px] ${open === c.key ? "text-white/60" : "text-ink-muted"}`}>{c.subtitle}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : tab === "pets" || tab === "people" ? (
+        <div className="flex flex-wrap gap-6">
+          {list.map((c) => (
+            <button key={c.key} onClick={() => setOpen(c.key)} className="group w-28 text-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`/api/thumb/${encodeURIComponent(c.photos[0].id)}`}
+                alt=""
+                className={`mx-auto h-24 w-24 rounded-full bg-slate-100 object-cover ring-offset-4 transition group-hover:scale-105 ${open === c.key ? "ring-[3px] ring-brand" : "ring-1 ring-line"}`}
+              />
+              <span className="mt-3 block truncate text-[14px] font-medium">{c.title}</span>
+              <span className="block text-[12px] text-ink-muted">{c.subtitle}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          {list.map((c) => (
+            <button key={c.key} onClick={() => setOpen(c.key)} className={`overflow-hidden rounded-2xl border bg-white text-left transition hover:-translate-y-0.5 hover:shadow-md ${open === c.key ? "border-brand ring-2 ring-brand/20" : "border-line"}`}>
+              <div className="grid aspect-[4/3] grid-cols-2 gap-0.5 bg-slate-100">
+                {c.photos.slice(0, 4).map((p) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={p.id} src={`/api/thumb/${encodeURIComponent(p.id)}`} alt="" loading="lazy" className="h-full w-full object-cover" />
+                ))}
+              </div>
+              <div className="p-3">
+                <p className="truncate text-[14px] font-medium">{c.title}</p>
+                <p className="text-[12px] text-ink-muted">{c.subtitle}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {current && (
+        <Card className="mt-8">
+          <div className="mb-4 flex items-baseline justify-between gap-3">
+            <h2 className="text-[18px] font-semibold">{current.title}</h2>
+            <p className="text-[13px] text-ink-muted">
+              {current.count.toLocaleString()} photos{current.count > current.photos.length ? ` · showing ${current.photos.length} most recent` : ""}
+            </p>
+          </div>
+          <div className="columns-2 gap-3 sm:columns-3 lg:columns-4">
+            {current.photos.map((p, i) => (
+              <button key={p.id} onClick={() => setPreview(i)} className="group relative mb-3 block w-full overflow-hidden rounded-xl bg-slate-100">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`/api/thumb/${encodeURIComponent(p.id)}`} alt={p.caption ?? p.name} loading="lazy" className="w-full transition duration-300 group-hover:scale-[1.03]" />
+                <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/60 to-transparent px-3 pb-2 pt-6 text-left text-[12px] text-white opacity-0 transition group-hover:opacity-100">
+                  {p.caption ?? p.name} · {p.accountLabel}
+                </span>
+              </button>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {preview !== null && items[preview] && <Lightbox items={items} index={preview} onIndex={setPreview} onClose={() => setPreview(null)} />}
+    </>
+  );
+}

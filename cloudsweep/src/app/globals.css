@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: light; }
+html, body { background: #F7F8FA; color: #0B0D12; }
+body { font-feature-settings: "cv11", "ss01"; -webkit-font-smoothing: antialiased; }
+::selection { background: #2F5BFF; color: white; }
+input[type="checkbox"], input[type="radio"] { accent-color: #2F5BFF; }
