@@ -22,7 +22,7 @@ It runs as a hosted site. Nothing to install, and it works from any device.
 | **Space left** | Every drive's free space in the sidebar on every page (and the menu on phones), so you always know where there's room. |
 | **Progress** | Space reclaimed so far, split by how (duplicates, deletes, moves, consolidation), by drive and by file type, with a 12-week chart and recent activity. Restored files drop out of the totals. |
 | **Phone friendly** | Every screen and action works on a phone, including selecting, renaming, moving and deleting. |
-| **Photos** | Category chips for **Places · Pets · People · Events · Scenes · Things**. Places shows an interactive cluster map. Pets and People show as circular bubbles. Collections open in a masonry grid. |
+| **Photos** | Category chips for **Places · Pets · People · Events · Scenes · Things**. Places shows an interactive cluster map. Pets and People show as circular bubbles. Collections open in a masonry grid. | **Pets, scenes, things and people are tagged for free by AI that runs on your own phone or computer** (photos never leave it; keep the tab open while it works), or by Claude if you add an `ANTHROPIC_API_KEY`. **Places** reads GPS from each photo itself when Google Drive or OneDrive leave it out (only the first ~192 KB of each photo is read).
 | **Command palette** | `⌘K` / `Ctrl+K` to jump to any page or run any tool. |
 
 ### How it stays safe

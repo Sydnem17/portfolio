@@ -13,7 +13,9 @@ import { hashFile, resolveFile, walk, type LDirHandle } from "@/lib/local-client
 export interface LocalTask {
   id: string;
   label: string;
-  phase: "listing" | "fingerprinting" | "done" | "failed" | "cancelled";
+  phase: "listing" | "fingerprinting" | "working" | "done" | "failed" | "cancelled";
+  /** Shown instead of "Scanning <label>" for other in-browser work (e.g. photo tagging). */
+  title?: string;
   message: string;
   done?: number;
   total?: number;
@@ -125,6 +127,26 @@ export function LocalScanManager() {
   }, []);
 
   return null;
+}
+
+/**
+ * Runs other long work in this tab (e.g. free photo tagging) and shows it in the task pill, with
+ * Cancel. Returns false when that task is already running.
+ */
+export function runInBrowser(id: string, title: string, work: (signal: AbortSignal, report: (patch: Partial<LocalTask>) => void) => Promise<string>): boolean {
+  if (controllers.has(id)) return false;
+  const ctrl = new AbortController();
+  controllers.set(id, ctrl);
+  tasks.set(id, { id, label: title, title, phase: "working", message: "Starting…" });
+  publish();
+  work(ctrl.signal, (patch) => update(id, patch))
+    .then((message) => update(id, { phase: "done", message, done: undefined, total: undefined }))
+    .catch((err) => update(id, (err as Error).name === "AbortError" ? { phase: "cancelled", message: "Cancelled" } : { phase: "failed", message: "Failed", error: (err as Error).message }))
+    .finally(() => {
+      controllers.delete(id);
+      window.dispatchEvent(new Event("cloudsweep:changed"));
+    });
+  return true;
 }
 
 export function startLocalScan(accountId: string, label: string, dir: LDirHandle) {
