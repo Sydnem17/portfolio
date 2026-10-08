@@ -176,6 +176,11 @@ export const demo: StorageProvider = {
     await save(ctx.accountId, { ...f, trashed: true });
   },
 
+  async purge(ctx, remoteId) {
+    await query("DELETE FROM demo_files WHERE account_id = $1 AND remote_id = $2", [ctx.accountId, remoteId]);
+    return "deleted" as const;
+  },
+
   async restore(ctx, remoteId) {
     const f = await getFile(ctx.accountId, remoteId);
     await save(ctx.accountId, { ...f, trashed: false });

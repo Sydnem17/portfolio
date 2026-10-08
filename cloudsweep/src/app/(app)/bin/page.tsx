@@ -15,7 +15,7 @@ export default async function Bin() {
     <>
       <PageHeader
         title="Staging bin"
-        intro="Everything CloudSweep removes lands here first, across every drive. Restore anything in one click. Each provider permanently deletes its trash on its own schedule (usually 30 days), so nothing is wiped by surprise."
+        intro="Everything CloudSweep removes lands here first, across every drive. Restore anything in one click, or delete it forever if you're sure. Otherwise each provider empties its trash on its own schedule (usually 30 days), so nothing is wiped by surprise."
       />
       <StagingBin
         items={staged.map((r) => ({ id: Number(r.id), name: r.name, bytes: num(r.bytes), path: r.detail?.path ?? "", stagedPath: r.detail?.stagedPath ?? null, reason: r.detail?.reason ?? "", at: new Date(r.created_at).toISOString(), account: r.label, accountId: r.account_id, provider: r.provider }))}

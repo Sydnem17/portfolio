@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { accountColour, bytes } from "@/lib/format";
-import { stageLocalFiles } from "@/lib/local-actions";
+import { purgeLocalFiles, stageLocalFiles } from "@/lib/local-actions";
 import { announceJobs } from "./JobDock";
 import { Dialog, type SelectionSpec } from "./RenameDialog";
 import { buttonClass } from "./ui";
@@ -26,6 +26,8 @@ export function DeleteDialog({ selection, onClose, onDone }: { selection: Select
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  // Off by default: normal deletes are always recoverable. Permanent deletion is a deliberate choice.
+  const [permanent, setPermanent] = useState(false);
 
   useEffect(() => {
     fetch("/api/selection", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(selection) })
@@ -52,11 +54,13 @@ export function DeleteDialog({ selection, onClose, onDone }: { selection: Select
     if (local.length) {
       const groups = new Map<string, Array<{ id: string; path: string }>>();
       for (const f of local) groups.set(f.accountId, [...(groups.get(f.accountId) ?? []), { id: f.id, path: f.path }]);
-      const r = await stageLocalFiles(groups, "deleted");
+      const r = permanent
+        ? await purgeLocalFiles(new Map([...groups].map(([acc, l]) => [acc, l.map((f) => ({ itemId: f.id, path: f.path }))])))
+        : await stageLocalFiles(groups, "deleted");
       if (r.failed) setNotice((problem = r.problems.join(" ")));
     }
     if (cloud.length) {
-      const r = await fetch("/api/trash", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ itemIds: cloud, reason: "deleted" }) }).then((x) => x.json());
+      const r = await fetch("/api/trash", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ itemIds: cloud, reason: "deleted", permanent }) }).then((x) => x.json());
       if (r.error) {
         setBusy(false);
         return setError(r.error);
@@ -90,19 +94,36 @@ export function DeleteDialog({ selection, onClose, onDone }: { selection: Select
               </li>
             ))}
           </ul>
-          <ul className="mt-4 space-y-1.5 text-[14px] text-ink-soft">
-            <li>
-              • Frees about <b>{bytes(total)}</b> once each drive empties its trash.
-            </li>
-            <li>• Cloud files go to that drive&apos;s own trash (kept 30+ days). Files on this computer go to a “CloudSweep Staging” folder on the same drive.</li>
-            <li>• Changed your mind? Put any of them back from the Staging bin.</li>
-          </ul>
+          {permanent ? (
+            <ul className="mt-4 space-y-1.5 rounded-xl bg-red-50 px-4 py-3 text-[14px] text-red-900">
+              <li>
+                • <b>This can&apos;t be undone.</b> Files skip the trash and the Staging bin, and free <b>{bytes(total)}</b> straight away.
+              </li>
+              <li>• Google Drive, work OneDrive and files on this computer are deleted for good.</li>
+              <li>• Personal OneDrive and Dropbox don&apos;t let apps delete permanently: those go to their recycle bin, which you can empty on their website.</li>
+            </ul>
+          ) : (
+            <ul className="mt-4 space-y-1.5 text-[14px] text-ink-soft">
+              <li>
+                • Frees about <b>{bytes(total)}</b> once each drive empties its trash.
+              </li>
+              <li>• Cloud files go to that drive&apos;s own trash (kept 30+ days). Files on this computer go to a “CloudSweep Staging” folder on the same drive.</li>
+              <li>• Changed your mind? Put any of them back from the Staging bin.</li>
+            </ul>
+          )}
+          <label className="mt-4 flex items-start gap-2.5 rounded-xl border border-line px-4 py-3 text-[14px]">
+            <input type="checkbox" className="mt-1" checked={permanent} onChange={(e) => setPermanent(e.target.checked)} />
+            <span>
+              <b className="font-medium">Delete permanently</b>
+              <span className="block text-[13px] text-ink-muted">Skip the trash. For things you never want back.</span>
+            </span>
+          </label>
           <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <button className={buttonClass("ghost")} onClick={onClose}>
               Cancel
             </button>
             <button className={buttonClass("danger")} disabled={busy} onClick={remove}>
-              {busy ? "Deleting…" : `Delete ${n.toLocaleString()} ${n === 1 ? "file" : "files"}`}
+              {busy ? "Deleting…" : `Delete ${n.toLocaleString()} ${n === 1 ? "file" : "files"}${permanent ? " forever" : ""}`}
             </button>
           </div>
         </>

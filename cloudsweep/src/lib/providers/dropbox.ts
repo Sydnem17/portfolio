@@ -176,6 +176,20 @@ export const dropbox: StorageProvider = {
     await post(`${API}/files/delete_v2`, await ctx.token(), { path: remoteId });
   },
 
+  async purge(ctx, remoteId, alreadyTrashed) {
+    if (alreadyTrashed) throw new ProviderError("Dropbox keeps it in Deleted files. Remove it there on the Dropbox website to free the space now.", 409);
+    const token = await ctx.token();
+    try {
+      // Permanent deletion is a Dropbox Business feature; other plans refuse it.
+      const meta = await post(`${API}/files/get_metadata`, token, { path: remoteId });
+      await post(`${API}/files/permanently_delete`, token, { path: meta.path_lower });
+      return "deleted";
+    } catch {
+      await post(`${API}/files/delete_v2`, token, { path: remoteId });
+      return "trashed";
+    }
+  },
+
   async restore() {
     throw new ProviderError("Dropbox files are restored from Dropbox → Deleted files on the web.", 501);
   },

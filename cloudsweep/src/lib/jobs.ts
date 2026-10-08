@@ -233,25 +233,41 @@ const HANDLERS: Record<JobType, (job: Job, deadline: number) => Promise<void>> =
   },
 
   async trash(job, deadline) {
-    const c = (job.cursor ??= { i: 0, bytes: 0, errors: 0 });
+    const c = (job.cursor ??= { i: 0, bytes: 0, errors: 0, recycled: 0 });
     const ids: string[] = job.params.itemIds ?? [];
+    const permanent = !!job.params.permanent;
     while (c.i < ids.length && Date.now() < deadline) {
       const it = await one<any>("SELECT i.id, i.account_id, i.remote_id, i.name, i.size, i.path, a.provider FROM items i JOIN accounts a ON a.id = i.account_id WHERE i.id = $1 AND NOT i.trashed", [ids[c.i]]);
       if (it?.provider === "local") c.errors++; // moved by the browser instead (see DuplicatesView)
       else if (it) {
         try {
-          await getProvider(it.provider).trash(await contextFor(it.account_id), it.remote_id);
-          await query("UPDATE items SET trashed = TRUE WHERE id = $1", [it.id]);
-          await logAction({ kind: "trash", accountId: it.account_id, itemId: it.id, remoteId: it.remote_id, name: it.name, bytes: num(it.size), detail: { path: it.path, reason: job.params.reason } });
+          const provider = getProvider(it.provider);
+          const ctx = await contextFor(it.account_id);
+          const outcome = permanent ? await provider.purge(ctx, it.remote_id, false) : (await provider.trash(ctx, it.remote_id), "trashed");
+          if (outcome === "deleted") {
+            await logAction({ kind: "purge", accountId: it.account_id, itemId: it.id, remoteId: it.remote_id, name: it.name, bytes: num(it.size), detail: { path: it.path, reason: job.params.reason, permanent: true } });
+            await query("DELETE FROM items WHERE id = $1", [it.id]);
+          } else {
+            if (permanent) c.recycled = (c.recycled ?? 0) + 1; // the provider only allows its recycle bin
+            await query("UPDATE items SET trashed = TRUE WHERE id = $1", [it.id]);
+            await logAction({ kind: "trash", accountId: it.account_id, itemId: it.id, remoteId: it.remote_id, name: it.name, bytes: num(it.size), detail: { path: it.path, reason: job.params.reason } });
+          }
           c.bytes += num(it.size);
         } catch {
           c.errors++;
         }
       }
       c.i++;
-      job.progress = { done: c.i, total: ids.length, bytes: c.bytes, errors: c.errors, message: `Moved ${c.i} of ${ids.length} to trash` };
+      job.progress = { done: c.i, total: ids.length, bytes: c.bytes, errors: c.errors, message: `${permanent ? "Deleted" : "Moved"} ${c.i} of ${ids.length}${permanent ? "" : " to trash"}` };
     }
     if (c.i >= ids.length) {
+      if (permanent) {
+        const gone = ids.length - c.errors - (c.recycled ?? 0);
+        job.progress.message =
+          `Deleted ${gone} file${gone === 1 ? "" : "s"} permanently` +
+          (c.recycled ? ` · ${c.recycled} went to their drive's recycle bin instead (OneDrive personal and Dropbox don't allow permanent deletion by apps — empty it on their website)` : "") +
+          (c.errors ? ` · ${c.errors} couldn't be deleted` : "");
+      }
       await save(job, { status: "done" });
       for (const a of new Set((await query<{ account_id: string }>("SELECT DISTINCT account_id FROM items WHERE id = ANY($1)", [ids])).map((r) => r.account_id)))
         await refreshQuota(a).catch(() => undefined);

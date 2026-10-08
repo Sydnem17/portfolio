@@ -1,5 +1,5 @@
 import { bearer, http, json, tokenRequest } from "./http";
-import type { CloudItem, OAuthTokens, StorageProvider } from "./types";
+import { ProviderError, type CloudItem, type OAuthTokens, type StorageProvider } from "./types";
 
 const GRAPH = "https://graph.microsoft.com/v1.0";
 const AUTH = "https://login.microsoftonline.com/common/oauth2/v2.0";
@@ -181,6 +181,24 @@ export const onedrive: StorageProvider = {
   async trash(ctx, remoteId) {
     // DELETE sends the item to the OneDrive recycle bin (kept 30 days personal / 93 days business).
     await http(`${GRAPH}/me/drive/items/${remoteId}`, { method: "DELETE", headers: bearer(await ctx.token()) });
+  },
+
+  async purge(ctx, remoteId, alreadyTrashed) {
+    if (alreadyTrashed)
+      throw new ProviderError("OneDrive keeps it in its recycle bin. Empty the recycle bin on the OneDrive website to free the space now.", 409);
+    try {
+      // permanentDelete exists for work/school OneDrive; personal OneDrive refuses it.
+      await http(`${GRAPH}/me/drive/items/${remoteId}/permanentDelete`, {
+        method: "POST",
+        headers: bearer(await ctx.token(), { "Content-Type": "application/json" }),
+        body: "{}",
+        retries: 0,
+      });
+      return "deleted";
+    } catch {
+      await onedrive.trash(ctx, remoteId);
+      return "trashed";
+    }
   },
 
   async restore(ctx, remoteId) {
