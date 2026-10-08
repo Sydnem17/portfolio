@@ -133,4 +133,25 @@ export async function recordLocalRestored(accountId: string, actionIds: number[]
   return { restored: actionIds.length };
 }
 
+/** Records files the browser renamed (or renamed back, when undoing a batch). */
+export async function recordLocalRenamed(accountId: string, renames: Array<{ id: string; from: string; to: string }>, opts: { batch?: string; undoOf?: string }) {
+  await assertLocal(accountId);
+  for (const r of renames) {
+    const it = await one<{ path: string | null }>("SELECT path FROM items WHERE id = $1 AND account_id = $2", [r.id, accountId]);
+    if (!it) continue;
+    const path = `${(it.path ?? "/" + r.from).slice(0, (it.path ?? "/" + r.from).lastIndexOf("/"))}/${r.to}`;
+    await query("UPDATE items SET name = $2, path = $3, updated_at = now() WHERE id = $1", [r.id, r.to, path]);
+    if (opts.undoOf) await query("UPDATE actions SET undone = TRUE WHERE kind = 'rename' AND item_id = $1 AND detail->>'batch' = $2", [r.id, opts.undoOf]);
+    else await logAction({ kind: "rename", accountId, itemId: r.id, name: r.to, detail: { from: r.from, to: r.to, path, batch: opts.batch, local: true } });
+  }
+  return { renamed: renames.length };
+}
+
+/** Records a folder the browser just created, so it shows in the Library before the next scan. */
+export async function recordLocalFolder(accountId: string, path: string) {
+  const parts = path.split("/").filter(Boolean);
+  const entries = parts.map((_, i) => ({ path: "/" + parts.slice(0, i + 1).join("/"), isFolder: true, size: 0, modifiedAt: new Date().toISOString() }));
+  return ingestLocalScan(accountId, "created", entries, false);
+}
+
 export { STAGING as LOCAL_STAGING_FOLDER };

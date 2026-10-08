@@ -86,6 +86,12 @@ async function places(rows: any[]): Promise<PhotoCollection[]> {
   return [...merged.values()].sort((a, b) => b.count - a.count);
 }
 
+/** Place name for a photo's coordinates, or null while it hasn't been looked up yet. */
+export async function placeNameAt(lat: number, lng: number, budget: { lookups: number }): Promise<string | null> {
+  const label = await placeLabel(`${Math.round(lat * 20) / 20},${Math.round(lng * 20) / 20}`, budget);
+  return /^-?\d+\.\d+, -?\d+\.\d+$/.test(label) ? null : label;
+}
+
 async function placeLabel(key: string, budget: { lookups: number }): Promise<string> {
   const cached = await one<{ label: string }>("SELECT label FROM geocache WHERE key = $1", [key]);
   if (cached) return cached.label;

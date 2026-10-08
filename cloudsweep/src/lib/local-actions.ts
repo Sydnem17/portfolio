@@ -1,6 +1,6 @@
 "use client";
 
-import { ensurePermission, moveToStaging, recallFolder, restoreFromStaging, supportsLocalFolders } from "./local-client";
+import { createFolder, ensurePermission, moveToStaging, recallFolder, renameFile, restoreFromStaging, supportsLocalFolders } from "./local-client";
 
 /**
  * Moves local duplicates into "CloudSweep Staging" on their drive and records them on the server.
@@ -65,4 +65,54 @@ export async function restoreLocalFiles(byAccount: Map<string, Array<{ actionId:
     }
   }
   return result;
+}
+
+/** Renames files on this computer, then records the new names. Used for a batch and for undoing one. */
+export async function renameLocalFiles(items: Array<{ id: string; accountId: string; path: string; newName: string }>, opts: { batch?: string | null; undoOf?: string }) {
+  const result = { renamed: 0, failed: 0, problems: [] as string[] };
+  if (!items.length) return result;
+  if (!supportsLocalFolders()) {
+    result.failed = items.length;
+    result.problems.push("Files on your computer can only be renamed from Chrome or Edge on that computer.");
+    return result;
+  }
+  const byAccount = new Map<string, typeof items>();
+  for (const it of items) byAccount.set(it.accountId, [...(byAccount.get(it.accountId) ?? []), it]);
+  for (const [accountId, list] of byAccount) {
+    const dir = await recallFolder(accountId);
+    if (!dir || !(await ensurePermission(dir))) {
+      result.failed += list.length;
+      result.problems.push("A local folder isn't available in this browser — open CloudSweep on the computer that has it.");
+      continue;
+    }
+    const done: Array<{ id: string; from: string; to: string }> = [];
+    for (const it of list) {
+      try {
+        await renameFile(dir, it.path, it.newName);
+        done.push({ id: it.id, from: it.path.split("/").pop()!, to: it.newName });
+      } catch {
+        result.failed++;
+      }
+    }
+    if (done.length) {
+      await fetch(`/api/local/${accountId}/renamed`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ renames: done, batch: opts.batch ?? undefined, undoOf: opts.undoOf }),
+      });
+      result.renamed += done.length;
+    }
+  }
+  if (result.failed && !result.problems.length) result.problems.push(`${result.failed} file(s) couldn't be renamed — they may have been moved, opened or renamed elsewhere. Rescan the folder and try again.`);
+  return result;
+}
+
+/** Creates a folder on this computer, then records it so the Library shows it. */
+export async function createLocalFolder(accountId: string, path: string) {
+  if (!supportsLocalFolders()) throw new Error("Folders on your computer can only be created from Chrome or Edge on that computer.");
+  const dir = await recallFolder(accountId);
+  if (!dir || !(await ensurePermission(dir))) throw new Error("That folder isn't available in this browser — open CloudSweep on the computer that has it.");
+  await createFolder(dir, path);
+  const r = await fetch(`/api/local/${accountId}/folder`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path }) });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? "Couldn't record the new folder");
 }

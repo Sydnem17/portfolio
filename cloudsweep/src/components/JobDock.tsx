@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { bytes } from "@/lib/format";
+import { renameLocalFiles } from "@/lib/local-actions";
+import { refreshDrives } from "./DriveMeter";
 import type { LocalTask } from "./LocalScanManager";
 
 interface Job {
@@ -13,12 +15,17 @@ interface Job {
   account_label?: string | null;
   progress: { done?: number; total?: number; message?: string; bytes?: number; errors?: number };
   error: string | null;
+  params?: { kind?: string; batch?: string; undoOf?: string; reason?: string };
 }
 
-const TITLE: Record<string, string> = { scan: "Scanning", verify: "Verifying matches", analyse: "Analysing photos", transfer: "Consolidating", trash: "Cleaning up" };
-const MINIMISED_KEY = "cloudsweep:jobdock-minimised";
+const TITLE: Record<string, string> = { scan: "Scanning", verify: "Verifying matches", analyse: "Analysing photos", transfer: "Consolidating", trash: "Cleaning up", rename: "Renaming files" };
 
-const title = (j: Job) => `${TITLE[j.type] ?? j.type}${j.account_label ? ` ${j.account_label}` : ""}`;
+const title = (j: Job) => {
+  if (j.type === "transfer" && j.params?.kind === "move") return `Moving files to ${j.account_label ?? "another drive"}`;
+  if (j.type === "rename") return j.params?.undoOf ? "Undoing renames" : "Renaming files";
+  if (j.type === "trash" && j.params?.reason === "deleted") return "Deleting files";
+  return `${TITLE[j.type] ?? j.type}${j.account_label ? ` ${j.account_label}` : ""}`;
+};
 const pct = (j: Job) => (j.progress.total ? Math.min(100, Math.round(((j.progress.done ?? 0) / j.progress.total) * 100)) : null);
 
 /**
@@ -30,25 +37,12 @@ export function JobDock() {
   const router = useRouter();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [finished, setFinished] = useState<Job[]>([]);
-  const [minimised, setMinimised] = useState(false);
+  // Always a small pill until you tap it. Opening is never remembered, so it can't pop up by itself
+  // on a later visit, and it folds back into the pill once everything has finished.
+  const [minimised, setMinimised] = useState(true);
   const [local, setLocal] = useState<LocalTask[]>([]);
   const busy = useRef(false);
-
-  useEffect(() => {
-    try {
-      setMinimised(localStorage.getItem(MINIMISED_KEY) === "1");
-    } catch {
-      /* storage unavailable: start expanded */
-    }
-  }, []);
-  const toggle = (value: boolean) => {
-    setMinimised(value);
-    try {
-      localStorage.setItem(MINIMISED_KEY, value ? "1" : "0");
-    } catch {
-      /* ignore */
-    }
-  };
+  const toggle = (value: boolean) => setMinimised(value);
 
   const load = useCallback(async () => {
     const r = await fetch("/api/jobs").then((x) => (x.ok ? x.json() : { jobs: [] }));
@@ -63,12 +57,9 @@ export function JobDock() {
 
   useEffect(() => {
     load();
-    const on = () => {
-      toggle(false); // a newly started task should be visible
-      load();
-    };
-    window.addEventListener("cloudsweep:jobs", on);
-    return () => window.removeEventListener("cloudsweep:jobs", on);
+    // New tasks never re-open a minimised panel; the pill's count shows them instead.
+    window.addEventListener("cloudsweep:jobs", load);
+    return () => window.removeEventListener("cloudsweep:jobs", load);
   }, [load]);
 
   useEffect(() => {
@@ -83,6 +74,7 @@ export function JobDock() {
         if (next) setFinished((f) => [next, ...f].slice(0, 3));
         router.refresh();
         window.dispatchEvent(new Event("cloudsweep:changed"));
+        refreshDrives();
         await load();
       } else {
         setJobs((js) => js.map((j) => (j.id === next.id ? next : j)));
@@ -95,6 +87,11 @@ export function JobDock() {
   const localRunning = local.filter((t) => t.phase === "listing" || t.phase === "fingerprinting");
   const localDone = local.filter((t) => !localRunning.includes(t));
   const running = jobs.length + localRunning.length;
+  const wasRunning = useRef(0);
+  useEffect(() => {
+    if (wasRunning.current > 0 && running === 0) setMinimised(true);
+    wasRunning.current = running;
+  }, [running]);
   if (!running && !finished.length && !localDone.length) return null;
 
   if (minimised)
@@ -183,6 +180,7 @@ export function JobDock() {
           <li key={j.id} className={`flex items-start justify-between gap-3 px-4 py-2.5 text-[12px] ${j.status === "failed" ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"}`}>
             <span>
               <b>{title(j)}</b> {j.status === "failed" ? `failed: ${j.error}` : j.status === "cancelled" ? "cancelled" : `— ${j.progress.message ?? "done"}`}
+              {j.type === "rename" && j.status === "done" && j.params?.batch && <UndoRenames batch={j.params.batch} onDone={() => setFinished((f) => f.filter((x) => x.id !== j.id))} />}
             </span>
             <button onClick={() => setFinished((f) => f.filter((x) => x.id !== j.id))} aria-label="Dismiss">
               ✕
@@ -191,6 +189,39 @@ export function JobDock() {
         ))}
       </ul>
     </div>
+  );
+}
+
+/** Puts a whole rename batch back, cloud and local files alike. */
+export function UndoRenames({ batch, onDone }: { batch: string; onDone?: () => void }) {
+  const [state, setState] = useState<"idle" | "busy" | "error">("idle");
+  const [msg, setMsg] = useState("");
+  return (
+    <span className="ml-1 inline-flex items-center gap-2">
+      <button
+        disabled={state === "busy"}
+        className="font-semibold underline underline-offset-2 hover:no-underline disabled:opacity-50"
+        onClick={async () => {
+          setState("busy");
+          const r = await fetch("/api/rename/undo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ batch }) }).then((x) => x.json());
+          if (r.error) {
+            setState("error");
+            setMsg(r.error);
+            return;
+          }
+          const local = await renameLocalFiles(r.local ?? [], { undoOf: batch });
+          if (local.failed) {
+            setState("error");
+            setMsg(local.problems[0] ?? "Some files couldn't be renamed back.");
+          } else onDone?.();
+          window.dispatchEvent(new Event("cloudsweep:jobs"));
+          window.dispatchEvent(new Event("cloudsweep:changed"));
+        }}
+      >
+        {state === "busy" ? "Undoing…" : "Undo"}
+      </button>
+      {state === "error" && <span className="text-red-700">{msg}</span>}
+    </span>
   );
 }
 

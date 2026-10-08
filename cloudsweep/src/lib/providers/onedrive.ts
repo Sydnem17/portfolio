@@ -169,6 +169,15 @@ export const onedrive: StorageProvider = {
     });
   },
 
+  async rename(ctx, remoteId, newName) {
+    // Graph refuses a name already used in the folder (409 nameAlreadyExists) rather than overwriting.
+    await http(`${GRAPH}/me/drive/items/${remoteId}`, {
+      method: "PATCH",
+      headers: bearer(await ctx.token(), { "Content-Type": "application/json" }),
+      body: JSON.stringify({ name: newName }),
+    });
+  },
+
   async trash(ctx, remoteId) {
     // DELETE sends the item to the OneDrive recycle bin (kept 30 days personal / 93 days business).
     await http(`${GRAPH}/me/drive/items/${remoteId}`, { method: "DELETE", headers: bearer(await ctx.token()) });

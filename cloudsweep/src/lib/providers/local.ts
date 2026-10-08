@@ -28,6 +28,7 @@ export const local: StorageProvider = {
   startUpload: inBrowser,
   uploadChunk: inBrowser,
   move: inBrowser,
+  rename: inBrowser,
   trash: inBrowser,
   restore: inBrowser,
 };

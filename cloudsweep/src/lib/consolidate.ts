@@ -19,7 +19,8 @@ export interface ConsolidateParams {
   skipDuplicates?: boolean;
 }
 
-export type PlannedAction = "copy" | "already-there" | "duplicate-in-batch" | "unsupported";
+/** relocate = move within the same drive (no copying needed). */
+export type PlannedAction = "copy" | "already-there" | "duplicate-in-batch" | "unsupported" | "relocate";
 
 export interface PlanRow {
   file: FileRow;
@@ -39,9 +40,7 @@ export interface Plan {
 const UNSUPPORTED_MIME = /^application\/vnd\.google-apps\./; // native Docs/Sheets/Slides need export, not download
 
 export async function buildPlan(p: ConsolidateParams): Promise<Plan> {
-  const target = await getAccount(p.targetAccountId);
-  if (!target) throw new Error("Target account not found");
-  if (target.provider === "local") throw new Error("Copying into a local folder isn't supported yet. Choose a cloud drive as the destination.");
+  const target = await transferTarget(p.targetAccountId);
   // Uploading from local folders runs in the browser and is planned for a later update.
   const localIds = new Set((await query<{ id: string }>("SELECT id FROM accounts WHERE provider = 'local'")).map((r) => r.id));
   const sources = p.sourceAccountIds.filter((id) => id !== p.targetAccountId && !localIds.has(id));
@@ -50,45 +49,69 @@ export async function buildPlan(p: ConsolidateParams): Promise<Plan> {
   const files = (sources.length ? await loadFiles({ accountIds: sources, kinds: p.kinds?.length ? p.kinds : undefined }) : []).filter(
     (f) => !prefix || f.path === prefix || f.path.startsWith(prefix + "/"),
   );
+  const root = "/" + p.targetFolder.trim().replace(/^\/+|\/+$/g, "");
+  return planTransfer(files, target, p.mode, p.skipDuplicates !== false, (f) => {
+    const dir = f.path.split("/").slice(0, -1).join("/");
+    const rel = prefix ? dir.slice(prefix.length) : dir;
+    return p.keepStructure === false ? root : `${root}/${f.accountLabel.replace(/[\\/:*?"<>|]/g, "-")}${rel}`.replace(/\/+/g, "/");
+  });
+}
+
+type TargetAccount = NonNullable<Awaited<ReturnType<typeof getAccount>>>;
+
+export async function transferTarget(id: string): Promise<TargetAccount> {
+  const target = await getAccount(id);
+  if (!target) throw new Error("Target account not found");
+  if (target.provider === "local") throw new Error("Copying into a local folder isn't supported yet. Choose a cloud drive as the destination.");
+  return target;
+}
+
+/** Decides what happens to each file: copy it, or skip it because the target (or the batch) already has it. */
+export async function planTransfer(
+  files: FileRow[],
+  target: TargetAccount,
+  mode: "copy" | "move",
+  skipDuplicates: boolean,
+  targetPathOf: (f: FileRow) => string,
+): Promise<Plan> {
   const mimes = new Map(
     (await query<{ id: string; mime: string | null }>("SELECT id, mime FROM items WHERE id = ANY($1)", [files.map((f) => f.id)])).map((r) => [r.id, r.mime]),
   );
-
   const targetKeys = new Set<string>();
-  if (p.skipDuplicates !== false) for (const f of await loadFiles({ accountIds: [p.targetAccountId] })) for (const k of hashKeys(f)) targetKeys.add(`${f.size}|${k}`);
+  if (skipDuplicates) for (const f of await loadFiles({ accountIds: [target.id] })) for (const k of hashKeys(f)) targetKeys.add(`${f.size}|${k}`);
   const plannedKeys = new Set<string>();
 
-  const root = "/" + p.targetFolder.trim().replace(/^\/+|\/+$/g, "");
   const rows: PlanRow[] = [];
-  for (const f of files.sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary) || a.path.localeCompare(b.path))) {
-    const dir = f.path.split("/").slice(0, -1).join("/");
-    const rel = prefix ? dir.slice(prefix.length) : dir;
-    const targetPath = p.keepStructure === false ? root : `${root}/${f.accountLabel.replace(/[\\/:*?"<>|]/g, "-")}${rel}`.replace(/\/+/g, "/");
+  for (const f of [...files].sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary) || a.path.localeCompare(b.path))) {
     const keys = hashKeys(f).map((k) => `${f.size}|${k}`);
     let action: PlannedAction = "copy";
     if (UNSUPPORTED_MIME.test(mimes.get(f.id) ?? "")) action = "unsupported";
-    else if (p.skipDuplicates !== false && keys.some((k) => targetKeys.has(k))) action = "already-there";
-    else if (p.skipDuplicates !== false && keys.some((k) => plannedKeys.has(k))) action = "duplicate-in-batch";
+    else if (skipDuplicates && keys.some((k) => targetKeys.has(k))) action = "already-there";
+    else if (skipDuplicates && keys.some((k) => plannedKeys.has(k))) action = "duplicate-in-batch";
     if (action === "copy") keys.forEach((k) => plannedKeys.add(k));
-    rows.push({ file: f, action, targetPath });
+    rows.push({ file: f, action, targetPath: targetPathOf(f) });
   }
 
-  const counts = { copy: 0, "already-there": 0, "duplicate-in-batch": 0, unsupported: 0 } as Record<PlannedAction, number>;
+  const counts = { copy: 0, "already-there": 0, "duplicate-in-batch": 0, unsupported: 0, relocate: 0 } as Record<PlannedAction, number>;
   rows.forEach((r) => counts[r.action]++);
   const bytesToTransfer = rows.filter((r) => r.action === "copy").reduce((s, r) => s + r.file.size, 0);
-  const bytesFreedAtSource = p.mode === "move" ? rows.filter((r) => r.action !== "unsupported").reduce((s, r) => s + r.file.size, 0) : 0;
+  const bytesFreedAtSource = mode === "move" ? rows.filter((r) => r.action !== "unsupported").reduce((s, r) => s + r.file.size, 0) : 0;
   const targetFree = target.quota_total != null && target.quota_used != null ? target.quota_total - target.quota_used : null;
 
   const warnings: string[] = [];
   if (targetFree != null && bytesToTransfer > targetFree) warnings.push(`Not enough space: ${target.label} has ${fmt(targetFree)} free but this needs ${fmt(bytesToTransfer)}.`);
   if (counts.unsupported) warnings.push(`${counts.unsupported} Google Docs/Sheets/Slides files are skipped — export them from Google first, or keep them in Google Drive.`);
-  if (p.mode === "move") warnings.push("Move mode sends each source file to its provider's trash only after the copy is verified. Trash is recoverable for 30+ days.");
+  if (mode === "move") warnings.push("Move mode sends each source file to its provider's trash only after the copy is verified. Trash is recoverable for 30+ days.");
   return { rows, counts, bytesToTransfer, bytesFreedAtSource, targetFree, warnings };
 }
 
 export async function startConsolidation(p: ConsolidateParams): Promise<string> {
-  const plan = await buildPlan(p);
-  const work = plan.rows.filter((r) => r.action !== "unsupported" && (r.action === "copy" || p.mode === "move"));
+  return queueTransfer(await buildPlan(p), p);
+}
+
+/** Creates a resumable transfer job for a plan. */
+export async function queueTransfer(plan: Plan, p: ConsolidateParams & { kind?: string }): Promise<string> {
+  const work = plan.rows.filter((r) => r.action !== "unsupported" && (r.action === "copy" || r.action === "relocate" || p.mode === "move"));
   const jobId = await createJob("transfer", p.targetAccountId, p, { done: 0, total: work.length, bytes: 0, message: "Starting" });
   for (let i = 0; i < work.length; i += 300) {
     const chunk = work.slice(i, i + 300);
@@ -99,7 +122,7 @@ export async function startConsolidation(p: ConsolidateParams): Promise<string> 
 }
 
 export async function runTransferStep(job: Job, deadline: number, save: (patch: Partial<Job>) => Promise<void>) {
-  const p = job.params as ConsolidateParams;
+  const p = job.params as ConsolidateParams & { kind?: string };
   const targetRow = (await one<{ provider: string }>("SELECT provider FROM accounts WHERE id = $1", [p.targetAccountId]))!;
   const target = getProvider(targetRow.provider);
   const tctx = await contextFor(p.targetAccountId);
@@ -118,6 +141,15 @@ export async function runTransferStep(job: Job, deadline: number, save: (patch: 
     const sctx = await contextFor(t.account_id);
     const size = num(t.size);
     try {
+      if (t.action === "relocate") {
+        // Same drive: the provider moves it in place. Nothing is copied or deleted.
+        await target.move(tctx, t.remote_id, await folder(t.target_path));
+        const to = `${t.target_path}/${t.name}`.replace(/\/+/g, "/");
+        await query("UPDATE items SET path = $2, updated_at = now() WHERE id = $1", [t.item_id, to]);
+        await logAction({ kind: "move", accountId: t.account_id, itemId: t.item_id, remoteId: t.remote_id, name: t.name, bytes: size, detail: { from: t.path, to } });
+        await query("UPDATE transfer_items SET status = 'done' WHERE job_id = $1 AND item_id = $2", [job.id, t.item_id]);
+        continue;
+      }
       if (t.action === "copy") {
         let session = t.session;
         let offset = num(t.bytes_done);
@@ -140,13 +172,13 @@ export async function runTransferStep(job: Job, deadline: number, save: (patch: 
         if (!created) continue; // resume this file on the next step
         verifyCopy(t, created);
         await upsertItems(p.targetAccountId, [{ ...created, path: null }], null);
-        await query("UPDATE items SET path = $2 WHERE id = $1", [`${p.targetAccountId}:${created.remoteId}`, `${t.target_path}/${created.name}`]);
+        await query("UPDATE items SET path = $2 WHERE id = $1", [`${p.targetAccountId}:${created.remoteId}`, `${t.target_path}/${created.name}`.replace(/\/+/g, "/")]);
         await logAction({ kind: "copy", accountId: p.targetAccountId, itemId: `${p.targetAccountId}:${created.remoteId}`, remoteId: created.remoteId, name: created.name, bytes: size, detail: { from: t.item_id, to: t.target_path } });
       }
       if (p.mode === "move") {
         await source.trash(sctx, t.remote_id);
         await query("UPDATE items SET trashed = TRUE WHERE id = $1", [t.item_id]);
-        await logAction({ kind: "trash", accountId: t.account_id, itemId: t.item_id, remoteId: t.remote_id, name: t.name, bytes: size, detail: { path: t.path, reason: "consolidated" } });
+        await logAction({ kind: "trash", accountId: t.account_id, itemId: t.item_id, remoteId: t.remote_id, name: t.name, bytes: size, detail: { path: t.path, reason: p.kind === "move" ? "moved" : "consolidated" } });
       }
       await query("UPDATE transfer_items SET status = 'done' WHERE job_id = $1 AND item_id = $2", [job.id, t.item_id]);
     } catch (err) {
@@ -161,7 +193,7 @@ export async function runTransferStep(job: Job, deadline: number, save: (patch: 
   );
   job.progress = { ...job.progress, done: num(counts.finished), total: num(counts.total), errors: num(counts.failed) };
   if (num(counts.finished) >= num(counts.total)) {
-    job.progress.message = num(counts.failed) ? `Finished with ${counts.failed} failed file(s)` : "Consolidation complete";
+    job.progress.message = num(counts.failed) ? `Finished with ${counts.failed} failed file(s)` : p.kind === "move" ? "Move complete" : "Consolidation complete";
     await save({ status: "done", progress: job.progress });
     for (const id of [p.targetAccountId, ...p.sourceAccountIds]) await refreshQuota(id).catch(() => undefined);
   }

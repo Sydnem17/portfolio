@@ -16,7 +16,12 @@ It runs as a hosted site. Nothing to install, and it works from any device.
 | **Smart select** | One click ticks every *identical* extra copy. The copy being kept, look-alikes and unverified matches are never ticked automatically. |
 | **Staging bin** | Everything CloudSweep removes goes to each provider's own trash first. Restore any file in one click, or everything at once. Providers purge their trash on their own schedule (usually 30 days). |
 | **Consolidate** | A three-step wizard: pick sources, then a destination, then review the plan. Skips files already in the destination, copies each unique file once, **verifies size and checksum**, and only then sends the original to the Staging bin. Checks free space before it starts. |
-| **Library** | A multi-cloud folder tree, search across every drive at once, and a lightbox that previews photos, plays video and audio with seeking, and shows PDFs and text inline. |
+| **Library** | A multi-cloud folder tree, search across every drive at once, and a lightbox that previews photos, plays video and audio with seeking, and shows PDFs and text inline. Tick files or whole folders, on any mix of drives, then **Rename**, **Move** or **Delete** them in one go. **+ New folder** creates folders anywhere. |
+| **Bulk rename** | Suggestions that fit what you picked: *Date + place*, *Date + number*, *Folder + date* for photos, *Tidy up names* and *Date first* for documents. Or build your own from Date, Year, Month, Place, Folder, Current name and Number, or use find and replace. Dates are `2024-03-16`, `16-03-2024` or `16 Mar 2024` (never month-first). A live preview shows every old → new name; clashes get “(2)” rather than overwriting anything. **Undo** puts the whole batch back. Free: uses dates, places and folders CloudSweep already knows. |
+| **Move** | Send files to another drive (copied, checked, and only then trashed at the source) or into a folder on the same drive (instant). Keeps sub-folders if you want, creates missing folders, warns when the destination is short of space, and can keep the original instead. |
+| **Space left** | Every drive's free space in the sidebar on every page (and the menu on phones), so you always know where there's room. |
+| **Progress** | Space reclaimed so far, split by how (duplicates, deletes, moves, consolidation), by drive and by file type, with a 12-week chart and recent activity. Restored files drop out of the totals. |
+| **Phone friendly** | Every screen and action works on a phone, including selecting, renaming, moving and deleting. |
 | **Photos** | Category chips for **Places · Pets · People · Events · Scenes · Things**. Places shows an interactive cluster map. Pets and People show as circular bubbles. Collections open in a masonry grid. |
 | **Command palette** | `⌘K` / `Ctrl+K` to jump to any page or run any tool. |
 
@@ -154,7 +159,8 @@ Works in **Chrome or Edge on a computer** (Windows or Mac). Nothing to install.
 4. **Photos → Analyse** to find look-alikes and build Places, Pets and other collections.
 5. **Duplicates → Smart select → Move to trash** for the identical copies. Then work through look-alikes in **Review mode**.
 6. **Consolidate** what's left into your primary drive (start with **Copy only** if you want to build trust first).
-7. Check the **Staging bin**, then let the providers empty their trash on schedule.
+7. **Library → tick files → Rename** to give camera names (`IMG_1234`) real dates and places, and **Move** to file things into folders.
+8. Check the **Staging bin**, then let the providers empty their trash on schedule. Watch your wins add up on **Progress**.
 
 ---
 

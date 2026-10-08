@@ -102,9 +102,24 @@ export async function resolvePaths(accountId: string) {
   }
 }
 
-export async function loadFiles(filter: { accountIds?: string[]; kinds?: string[] } = {}): Promise<FileRow[]> {
+export async function loadFiles(
+  filter: { accountIds?: string[]; kinds?: string[]; ids?: string[]; under?: Array<{ accountId: string; path: string }> } = {},
+): Promise<FileRow[]> {
   const where = ["NOT i.is_folder", "NOT i.trashed"];
   const params: unknown[] = [];
+  // ids and folders together form one selection (files picked one by one, plus everything inside picked folders).
+  if (filter.ids || filter.under) {
+    const any: string[] = [];
+    if (filter.ids?.length) {
+      params.push(filter.ids);
+      any.push(`i.id = ANY($${params.length})`);
+    }
+    for (const u of filter.under ?? []) {
+      params.push(u.accountId, u.path.replace(/\/+$/, "") + "/");
+      any.push(`(i.account_id = $${params.length - 1} AND starts_with(i.path, $${params.length}))`);
+    }
+    where.push(any.length ? `(${any.join(" OR ")})` : "FALSE");
+  }
   if (filter.accountIds?.length) {
     params.push(filter.accountIds);
     where.push(`i.account_id = ANY($${params.length})`);
