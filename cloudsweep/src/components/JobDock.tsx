@@ -19,7 +19,6 @@ interface Job {
 }
 
 const TITLE: Record<string, string> = { scan: "Scanning", verify: "Verifying matches", analyse: "Analysing photos", transfer: "Consolidating", trash: "Cleaning up", rename: "Renaming files" };
-const MINIMISED_KEY = "cloudsweep:jobdock-minimised";
 
 const title = (j: Job) => {
   if (j.type === "transfer" && j.params?.kind === "move") return `Moving files to ${j.account_label ?? "another drive"}`;
@@ -38,26 +37,12 @@ export function JobDock() {
   const router = useRouter();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [finished, setFinished] = useState<Job[]>([]);
-  // Starts as a small pill; it only opens when you click it, and remembers your choice.
+  // Always a small pill until you tap it. Opening is never remembered, so it can't pop up by itself
+  // on a later visit, and it folds back into the pill once everything has finished.
   const [minimised, setMinimised] = useState(true);
   const [local, setLocal] = useState<LocalTask[]>([]);
   const busy = useRef(false);
-
-  useEffect(() => {
-    try {
-      setMinimised(localStorage.getItem(MINIMISED_KEY) !== "0");
-    } catch {
-      /* storage unavailable: stay minimised */
-    }
-  }, []);
-  const toggle = (value: boolean) => {
-    setMinimised(value);
-    try {
-      localStorage.setItem(MINIMISED_KEY, value ? "1" : "0");
-    } catch {
-      /* ignore */
-    }
-  };
+  const toggle = (value: boolean) => setMinimised(value);
 
   const load = useCallback(async () => {
     const r = await fetch("/api/jobs").then((x) => (x.ok ? x.json() : { jobs: [] }));
@@ -102,6 +87,11 @@ export function JobDock() {
   const localRunning = local.filter((t) => t.phase === "listing" || t.phase === "fingerprinting");
   const localDone = local.filter((t) => !localRunning.includes(t));
   const running = jobs.length + localRunning.length;
+  const wasRunning = useRef(0);
+  useEffect(() => {
+    if (wasRunning.current > 0 && running === 0) setMinimised(true);
+    wasRunning.current = running;
+  }, [running]);
   if (!running && !finished.length && !localDone.length) return null;
 
   if (minimised)

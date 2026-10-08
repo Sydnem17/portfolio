@@ -195,7 +195,7 @@ export function LibraryView({ accounts }: { accounts: Account[] }) {
         </section>
       </div>
       {selCount > 0 && (
-        <div className="sticky bottom-4 z-30 mx-auto mt-6 flex w-fit max-w-full flex-wrap items-center gap-2 rounded-2xl border border-line bg-white p-2 pl-4 shadow-lg shadow-black/10">
+        <div className="sticky bottom-[72px] z-30 mx-auto mt-6 flex sm:bottom-4 w-fit max-w-full flex-wrap items-center gap-2 rounded-2xl border border-line bg-white p-2 pl-4 shadow-lg shadow-black/10">
           <span className="mr-1 text-[14px]">
             <b>{selFiles.size ? `${selFiles.size} ${selFiles.size === 1 ? "file" : "files"}` : ""}{selFiles.size && selFolders.size ? " + " : ""}{selFolders.size ? `${selFolders.size} ${selFolders.size === 1 ? "folder" : "folders"}` : ""}</b> selected
           </span>
