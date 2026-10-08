@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ReviewMode } from "./ReviewMode";
 import { stageLocalFiles } from "@/lib/local-actions";
 import type { DuplicateGroup, FolderOverlap } from "@/lib/dedupe";
-import { bytes, date, KIND_LABEL, accountColour } from "@/lib/format";
+import { bytes, date, KIND_COLOUR, KIND_LABEL, accountColour } from "@/lib/format";
 import { announceJobs } from "./JobDock";
 import { Badge, buttonClass, Card, Empty, PageHeader, Stat, Thumb } from "./ui";
 
@@ -15,6 +15,8 @@ interface Report {
   groups: DuplicateGroup[];
   folders: FolderOverlap[];
 }
+
+const VIEW_KEY = "cloudsweep:duplicates-view";
 
 const CONF: Record<string, { label: string; tone: "bad" | "warn" | "violet"; note: string }> = {
   exact: { label: "Identical", tone: "bad", note: "Byte-for-byte identical — confirmed by matching checksums." },
@@ -31,6 +33,25 @@ export function DuplicatesView({ accounts }: { accounts: Array<{ id: string; lab
   const [confirming, setConfirming] = useState(false);
   const [reviewing, setReviewing] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // List suits big screens; grid is easier for comparing photos and on phones. Remembered per device.
+  const [view, setView] = useState<"list" | "grid">("list");
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(VIEW_KEY);
+      if (v === "list" || v === "grid") setView(v);
+      else if (window.matchMedia("(max-width: 640px)").matches) setView("grid");
+    } catch {
+      /* storage unavailable: keep the default */
+    }
+  }, []);
+  const chooseView = (v: "list" | "grid") => {
+    setView(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      /* ignore */
+    }
+  };
 
   const load = useCallback(async () => {
     const p = new URLSearchParams(Object.entries(filters).filter(([, v]) => v) as [string, string][]);
@@ -192,6 +213,13 @@ export function DuplicatesView({ accounts }: { accounts: Array<{ id: string; lab
             <option value={String(1024 ** 3)}>Over 1 GB</option>
           </select>
           <input value={filters.q} onChange={set("q")} placeholder="Search name or folder" className="min-w-[180px] flex-1 rounded-xl border border-line bg-white px-3 py-2 text-[13px]" />
+          <div className="flex rounded-xl border border-line bg-white p-1 text-[13px]" role="group" aria-label="Layout">
+            {(["list", "grid"] as const).map((v) => (
+              <button key={v} onClick={() => chooseView(v)} aria-pressed={view === v} className={`rounded-lg px-3 py-1 capitalize ${view === v ? "bg-ink text-white" : "text-ink-soft"}`}>
+                {v}
+              </button>
+            ))}
+          </div>
         </div>
         <p className="mt-2 text-[12px] text-ink-muted">
           {report.filteredCount.toLocaleString()} sets · {bytes(report.filteredWaste)} reclaimable in this view
@@ -227,6 +255,18 @@ export function DuplicatesView({ accounts }: { accounts: Array<{ id: string; lab
                     <p className="text-[12px] text-ink-muted">reclaimable</p>
                   </div>
                 </div>
+                {view === "grid" ? (
+                  <MemberGrid
+                    group={g}
+                    keeper={keeper}
+                    selected={selected}
+                    onKeep={(id) => {
+                      setKeep((k) => ({ ...k, [g.key]: id }));
+                      toggle(id, false);
+                    }}
+                    onToggle={toggle}
+                  />
+                ) : (
                 <div className="overflow-x-auto border-t border-line">
                   <table className="w-full min-w-[640px] text-[13px]">
                     <thead className="bg-slate-50 text-left text-[12px] text-ink-muted">
@@ -284,6 +324,7 @@ export function DuplicatesView({ accounts }: { accounts: Array<{ id: string; lab
                     </tbody>
                   </table>
                 </div>
+                )}
                 <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-5 py-3">
                   <p className="text-[12px] text-ink-muted">{keeper === g.keeperId ? `Suggested keep: ${g.keeperReasons.join(", ")}` : "Your choice of copy to keep"}</p>
                   {g.confidence !== "likely" && (
@@ -312,7 +353,7 @@ export function DuplicatesView({ accounts }: { accounts: Array<{ id: string; lab
             <button className="rounded-xl px-3 py-2 text-[13px] text-white/70 hover:text-white" onClick={() => setSelected(new Set())}>
               Clear
             </button>
-            <button className="rounded-xl bg-white px-4 py-2 text-[13px] font-semibold text-ink" onClick={() => setConfirming(true)}>
+            <button className="whitespace-nowrap rounded-xl bg-white px-4 py-2 text-[13px] font-semibold text-ink" onClick={() => setConfirming(true)}>
               Move to trash
             </button>
           </div>
@@ -363,4 +404,85 @@ export function DuplicatesView({ accounts }: { accounts: Array<{ id: string; lab
 function FileIcon({ kind }: { kind: string }) {
   const label = { video: "VID", document: "DOC", archive: "ZIP", audio: "AUD" }[kind] ?? "FILE";
   return <div className="grid h-16 w-16 shrink-0 place-items-center rounded-xl bg-slate-100 text-[12px] font-semibold text-ink-muted">{label}</div>;
+}
+
+/** Grid layout: each copy as a tile you can tap to mark for removal. */
+function MemberGrid({
+  group: g,
+  keeper,
+  selected,
+  onKeep,
+  onToggle,
+}: {
+  group: DuplicateGroup;
+  keeper: string;
+  selected: Set<string>;
+  onKeep: (id: string) => void;
+  onToggle: (id: string) => void;
+}) {
+  const visual = g.kind === "image";
+  return (
+    <div className="grid grid-cols-2 gap-3 border-t border-line p-4 sm:grid-cols-3 sm:p-5 lg:grid-cols-4">
+      {g.members.map((m) => {
+        const isKeeper = m.id === keeper;
+        const removable = !isKeeper && g.confidence !== "likely";
+        const marked = selected.has(m.id);
+        const ext = m.name.includes(".") ? m.name.split(".").pop() : g.kind;
+        return (
+          <div
+            key={m.id}
+            className={`relative flex min-w-0 flex-col overflow-hidden rounded-xl border bg-white transition ${
+              isKeeper ? "border-good ring-2 ring-good/40" : marked ? "border-bad ring-2 ring-bad/30" : "border-line"
+            }`}
+          >
+            <button
+              type="button"
+              disabled={!removable}
+              onClick={() => onToggle(m.id)}
+              aria-pressed={marked}
+              aria-label={isKeeper ? `Keeping ${m.name} on ${m.accountLabel}` : `${marked ? "Unmark" : "Mark"} the copy on ${m.accountLabel} for removal`}
+              className="relative block w-full disabled:cursor-default"
+            >
+              {visual ? (
+                <Thumb id={m.id} alt="" className={`aspect-square w-full ${marked ? "opacity-40" : ""}`} />
+              ) : (
+                <div
+                  className={`grid h-16 w-full place-items-center text-[13px] font-semibold uppercase tracking-wider ${marked ? "opacity-40" : ""}`}
+                  style={{ background: `${KIND_COLOUR[g.kind] ?? "#64748B"}14`, color: KIND_COLOUR[g.kind] ?? "#64748B" }}
+                >
+                  {ext}
+                </div>
+              )}
+              <span className="absolute left-2 top-2">
+                {isKeeper ? (
+                  <span className="rounded-full bg-good px-2 py-0.5 text-[11px] font-semibold text-white shadow-sm">Keep</span>
+                ) : removable ? (
+                  <span className={`grid h-6 w-6 place-items-center rounded-md border text-[13px] font-bold shadow-sm ${marked ? "border-bad bg-bad text-white" : "border-slate-300 bg-white/90 text-transparent"}`}>✓</span>
+                ) : null}
+              </span>
+              {marked && <span className={`absolute inset-x-0 text-center text-[12px] font-semibold text-bad ${visual ? "bottom-2" : "bottom-1"}`}>Will be removed</span>}
+            </button>
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5 p-3 text-[12px]">
+              <span className="flex min-w-0 items-center gap-1.5 font-medium">
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: accountColour(m.provider, m.accountLabel) }} />
+                <span className="truncate" title={m.accountLabel}>{m.accountLabel}</span>
+              </span>
+              <span className="truncate text-ink-muted" title={m.path}>
+                {m.webUrl ? <a href={m.webUrl} target="_blank" rel="noreferrer" className="hover:underline">{m.path.split("/").slice(0, -1).join("/") || "/"}</a> : m.path.split("/").slice(0, -1).join("/") || "/"}
+              </span>
+              <span className="text-ink-muted">
+                {bytes(m.size)}
+                {m.width && g.confidence === "similar" ? ` · ${m.width}×${m.height}` : ""} · {date(m.modifiedAt)}
+              </span>
+              {!isKeeper && (
+                <button type="button" onClick={() => onKeep(m.id)} className="mt-auto self-start pt-1.5 text-[12px] font-medium text-brand hover:underline">
+                  Keep this one instead
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
