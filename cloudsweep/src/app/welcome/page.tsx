@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { BrandMark } from "@/components/BrandMark";
 
 export const metadata: Metadata = {
   title: "CloudSweep — find duplicates and tidy every cloud drive",
@@ -26,9 +27,11 @@ export default function Welcome() {
     <main className="min-h-screen bg-white">
       <header className="mx-auto flex max-w-5xl items-center justify-between px-4 py-5 sm:px-8">
         <span className="flex items-center gap-2.5">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.svg" alt="" width={30} height={30} />
-          <span className="text-[17px] font-semibold tracking-tight">CloudSweep</span>
+          <BrandMark size={40} />
+          <span className="leading-tight">
+            <span className="block text-[17px] font-semibold tracking-tight">CloudSweep</span>
+            <span className="block text-[11px] font-medium uppercase tracking-[0.12em] text-ink-muted">by Harlem Hustle</span>
+          </span>
         </span>
         <Link href="/login" className="rounded-xl bg-ink px-4 py-2 text-[14px] font-medium text-white hover:bg-black">
           Sign in

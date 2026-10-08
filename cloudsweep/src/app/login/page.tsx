@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { BrandMark } from "@/components/BrandMark";
 
 export default function Login() {
   const [password, setPassword] = useState("");
@@ -24,10 +25,10 @@ export default function Login() {
   return (
     <main className="grid min-h-screen place-items-center bg-white px-4">
       <form onSubmit={submit} className="w-full max-w-sm">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.svg" alt="" width={44} height={44} />
+        <BrandMark size={72} />
         <h1 className="mt-6 text-[26px] font-semibold tracking-tight">Sign in to CloudSweep</h1>
         <p className="mt-1.5 text-[15px] text-ink-muted">Your private control room for every cloud drive you own.</p>
+        <p className="mt-1 text-[12px] font-medium uppercase tracking-[0.12em] text-ink-muted">A Harlem Hustle app</p>
         <label className="mt-8 block text-[13px] font-medium" htmlFor="pw">
           Password
         </label>
