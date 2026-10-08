@@ -1,7 +1,7 @@
 "use client";
 
 import { runInBrowser } from "@/components/LocalScanManager";
-import { GRAPHIC_TAGS, looksLikeGraphic, pixelStats, toTags, type BrowserTags } from "./photo-labels";
+import { GRAPHIC_TAGS, looksLikeGraphic, pixelStats, TAGGER_VERSION, toTags, type BrowserTags } from "./photo-labels";
 
 /**
  * Free photo tagging that runs on this device. Two small open models (COCO-SSD for objects,
@@ -94,7 +94,7 @@ export function startPhotoTagging(): boolean {
         done++;
         report({ message: `Looking at photos · ${done.toLocaleString()} of ${total.toLocaleString()}`, done, total });
       }
-      await post("/api/photos/tags", { tags: results });
+      await post("/api/photos/tags", { tagger: TAGGER_VERSION, tags: results });
       window.dispatchEvent(new Event("cloudsweep:changed"));
     }
     return done ? `Tagged ${done.toLocaleString()} photos (${found.toLocaleString()} with pets, people, scenes or things)` : "Every photo is already tagged";

@@ -1,9 +1,10 @@
 import "server-only";
 import { z } from "zod";
+import { TAGGER_VERSION } from "../photo-labels";
 import { num, one, query } from "../db";
 
 /** Bump when the browser tagging rules improve: photos tagged by an older version are looked at again. */
-export const BROWSER_TAGGER = "browser-v3";
+export const BROWSER_TAGGER = TAGGER_VERSION;
 /** Photos with no AI tags yet, or tags from an older version of the free browser AI. */
 export const NEEDS_BROWSER_TAGS = `(t.item_id IS NULL OR t.tagged_by IS NULL OR (t.tagged_by LIKE 'browser%' AND t.tagged_by <> '${BROWSER_TAGGER}'))`;
 
@@ -19,6 +20,7 @@ export async function untaggedPhotos(limit: number) {
 
 const text = z.string().trim().min(1).max(80);
 export const BrowserTagsBody = z.object({
+  tagger: z.string().optional(),
   tags: z
     .array(
       z.union([

@@ -7,6 +7,9 @@
  */
 import { IMAGENET_CLASSES } from "@tensorflow-models/mobilenet/dist/imagenet_classes";
 
+/** Bump whenever these rules change: older tags are redone, and tabs still running old rules are turned away. */
+export const TAGGER_VERSION = "browser-v4";
+
 export interface Detection {
   class: string;
   score: number;
@@ -107,7 +110,11 @@ export function toTags(detections: Detection[], predictions: Prediction[]): Brow
     pets.push({ species, description: match && match.probability >= BREED_CONFIDENCE ? breedName(match.className) : species });
   }
   // Wild animals keep their own type ("meerkat", "red fox"), grouped under Pets & animals as wildlife.
-  const wildName = predictions.find((p) => p.probability >= 0.2 && wildAnimal(p.className));
+  // On paintings and digital art the classifier forces an animal name ("nematode" for green smoke,
+  // "sea urchin" for fireworks). So name a wild animal only when the object detector also sees an
+  // animal in the picture, or when the classifier is very sure.
+  const animalSeen = seen.some((d) => COCO_PETS[d.class] || COCO_WILD.has(d.class));
+  const wildName = predictions.find((p) => wildAnimal(p.className) && (p.probability >= 0.6 || (animalSeen && p.probability >= 0.2)));
   if (wildName && !pets.length) pets.push({ species: "wildlife", description: wildAnimal(wildName.className)! });
   // The detector also knows a few big animals; trust it only when the classifier sees some animal too.
   const bigAnimal = seen.find((d) => COCO_WILD.has(d.class) && d.score >= 0.7);
@@ -118,7 +125,8 @@ export function toTags(detections: Detection[], predictions: Prediction[]): Brow
   if (sure && !pets.some((p) => p.species === petSpecies(sure.className))) pets.push({ species: petSpecies(sure.className)!, description: breedName(sure.className) });
 
   let scene: string | null = null;
-  for (const p of predictions.filter((x) => x.probability >= 0.15)) {
+  // Digital art and abstract images pull weak scene guesses ("stage", "spotlight"), so ask for a surer one.
+  for (const p of predictions.filter((x) => x.probability >= 0.3)) {
     scene = SCENE_BY_NAME.get(short(p.className).toLowerCase()) ?? null;
     if (scene) break;
   }

@@ -96,3 +96,14 @@ describe("telling graphics from photos", async () => {
     expect(looksLikeGraphic({ name: "artwork.png", mime: "image/png" }, { top4: 0.6, distinct: 120 })).toBe(true);
   });
 });
+
+describe("artwork is not wildlife", () => {
+  it("ignores animal guesses on paintings and digital art unless something animal-shaped is there", () => {
+    expect(toTags([], pred(["nematode, nematode worm, roundworm", 0.45])).pets).toEqual([]);
+    expect(toTags([], pred(["sea urchin", 0.38])).pets).toEqual([]);
+    expect(toTags(det(["dining table", 0.7]), pred(["king crab, Alaska crab, Alaskan king crab, Alaska king crab, Paralithodes camtschatica", 0.3])).pets).toEqual([]);
+    expect(toTags([], pred(["rock beauty, Holocanthus tricolor", 0.25])).scene).not.toBe("wildlife");
+    // A clear wildlife photo with no detection still counts when the classifier is very sure.
+    expect(toTags([], pred(["hippopotamus, hippo, river horse, Hippopotamus amphibius", 0.8])).pets).toEqual([{ species: "wildlife", description: "hippopotamus" }]);
+  });
+});

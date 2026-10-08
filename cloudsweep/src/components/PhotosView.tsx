@@ -74,7 +74,24 @@ export function PhotosView({ vision }: { vision: boolean }) {
       <div className="mb-6 grid gap-2 rounded-xl border border-line bg-white px-4 py-3 text-[13px] text-ink-soft sm:grid-cols-2">
         <p>
           📍 <b>{data.located.toLocaleString()}</b> of {data.total.toLocaleString()} photos have a location
-          {data.gpsToCheck > 0 ? <span className="text-ink-muted"> · {data.gpsToCheck.toLocaleString()} still to check</span> : null}
+          {data.gpsToCheck > 0 ? (
+            <span className="text-ink-muted"> · {data.gpsToCheck.toLocaleString()} still to check</span>
+          ) : data.located < data.total ? (
+            <>
+              {" · "}
+              <button
+                className="font-medium text-brand hover:underline"
+                onClick={async () => {
+                  await fetch("/api/photos/recheck-locations", { method: "POST" });
+                  announceJobs();
+                  load();
+                }}
+                title="Read the location saved inside every photo that doesn't have one yet"
+              >
+                Check locations again
+              </button>
+            </>
+          ) : null}
         </p>
         <p>
           🐾 {vision ? "Pets, scenes and things by Claude" : "Pets, scenes and things by free AI on this device"}
