@@ -1,10 +1,19 @@
 import { CommandPalette } from "@/components/CommandPalette";
 import { JobDock } from "@/components/JobDock";
+import { SetupChecklist } from "@/components/SetupChecklist";
 import { Sidebar } from "@/components/Sidebar";
+import { setupIssues } from "@/lib/setup";
 
 export const dynamic = "force-dynamic";
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const issues = await setupIssues();
+  if (issues.length)
+    return (
+      <main className="min-h-screen px-4 sm:px-8">
+        <SetupChecklist issues={issues} />
+      </main>
+    );
   return (
     <div className="lg:flex">
       <Sidebar />
