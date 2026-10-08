@@ -110,7 +110,7 @@ describe("free photo features: places from the photo itself, and browser AI tags
     expect((await untaggedPhotos(10)).ids).toContain("g1:no-gps");
     await saveBrowserTags([{ id: "g1:no-gps", failed: true }]);
     expect((await untaggedPhotos(10)).ids).not.toContain("g1:no-gps");
-    expect((await one<any>("SELECT tagged_by FROM photo_tags WHERE item_id = 'g1:no-gps'")).tagged_by).toBe("browser-v3");
+    expect((await one<any>("SELECT tagged_by FROM photo_tags WHERE item_id = 'g1:no-gps'")).tagged_by).toBe("browser-v4");
   });
 
   it("retries photos it couldn't read on the next run instead of marking them checked", async () => {
@@ -118,5 +118,22 @@ describe("free photo features: places from the photo itself, and browser AI tags
     expect((await runToEnd(await createJob("analyse", null))).status).toBe("done");
     expect((await one<any>("SELECT exif_checked FROM items WHERE id = 'g1:flaky'")).exif_checked).toBe(false);
     expect((await photoCollections()).gpsToCheck).toBeGreaterThanOrEqual(1);
+  });
+
+  it("can re-check every photo without a location", async () => {
+    const { recheckLocations } = await import("@/lib/photos/exif-queue");
+    const before = await photoCollections();
+    const r = await recheckLocations();
+    expect(r.queued).toBeGreaterThan(0);
+    expect((await photoCollections()).gpsToCheck).toBe(before.gpsToCheck + r.queued);
+  });
+
+  it("turns away tags from a tab still running older rules", async () => {
+    const { POST } = await import("@/app/api/photos/tags/route");
+    const send = (body: object) => POST(new Request("http://x/api/photos/tags", { method: "POST", body: JSON.stringify(body) }));
+    const old = await send({ tags: [{ id: "g1:no-gps", failed: true }] });
+    expect(old.status).toBe(409);
+    expect((await old.json()).error).toMatch(/refresh the page/);
+    expect((await send({ tagger: "browser-v4", tags: [{ id: "g1:no-gps", failed: true }] })).status).toBe(200);
   });
 });
