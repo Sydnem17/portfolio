@@ -42,6 +42,15 @@ function petSpecies(className: string): string | null {
   return null;
 }
 
+/** ImageNet's first 398 classes are animals; the ones that aren't pets are wildlife (fox, meerkat, hippo…). */
+function wildAnimal(className: string): string | null {
+  const i = INDEX.get(className);
+  return i != null && i <= 397 && !petSpecies(className) ? short(className).toLowerCase() : null;
+}
+
+/** Below this, the classifier is guessing (it doesn't know every breed, e.g. dachshunds), so say just "dog". */
+const BREED_CONFIDENCE = 0.35;
+
 const CAT_NAMES: Record<string, string> = { tabby: "tabby cat", "tiger cat": "tiger-striped cat", Persian: "Persian cat", Siamese: "Siamese cat", "Egyptian cat": "Egyptian cat" };
 const breedName = (className: string) => {
   const n = short(className);
@@ -83,15 +92,23 @@ export function toTags(detections: Detection[], predictions: Prediction[]): Brow
   const seen = detections.filter((d) => d.score >= 0.5);
   const people = seen.filter((d) => d.class === "person").length;
 
-  // Pets: an object detector sees the animal; the classifier usually knows the breed.
+  // Pets: the object detector sees "an animal shaped like a dog/cat/bird/horse", but it labels foxes as
+  // cats, meerkats as dogs and hippos as horses. So the whole-picture classifier must agree: it either
+  // names a pet of that species, or at least doesn't name a wild animal and the detector is very sure.
   const pets: BrowserTags["pets"] = [];
   const top = predictions.filter((p) => p.probability >= 0.12);
+  const wild = predictions.filter((p) => p.probability >= 0.15).map((p) => wildAnimal(p.className)).filter(Boolean) as string[];
   for (const species of new Set(seen.map((d) => COCO_PETS[d.class]).filter(Boolean))) {
-    const breed = top.find((p) => petSpecies(p.className) === species);
-    pets.push({ species, description: breed ? breedName(breed.className) : species });
+    const match = top.find((p) => petSpecies(p.className) === species);
+    const bestScore = Math.max(...seen.filter((d) => COCO_PETS[d.class] === species).map((d) => d.score));
+    if (!match && (wild.length || bestScore < 0.75)) continue;
+    pets.push({ species, description: match && match.probability >= BREED_CONFIDENCE ? breedName(match.className) : species });
   }
+  // Wild animals keep their own type ("meerkat", "red fox"), grouped under Pets & animals as wildlife.
+  const wildName = predictions.find((p) => p.probability >= 0.2 && wildAnimal(p.className));
+  if (wildName && !pets.length) pets.push({ species: "wildlife", description: wildAnimal(wildName.className)! });
   // A close-up pet often fills the frame, which the object detector can miss.
-  const sure = predictions.find((p) => p.probability >= 0.35 && petSpecies(p.className));
+  const sure = predictions.find((p) => p.probability >= BREED_CONFIDENCE && petSpecies(p.className));
   if (sure && !pets.some((p) => p.species === petSpecies(sure.className))) pets.push({ species: petSpecies(sure.className)!, description: breedName(sure.className) });
 
   let scene: string | null = null;
@@ -100,11 +117,12 @@ export function toTags(detections: Detection[], predictions: Prediction[]): Brow
     if (scene) break;
   }
   scene ??= seen.map((d) => COCO_SCENES[d.class]).find(Boolean) ?? null;
+  if (!scene && pets.some((p) => p.species === "wildlife")) scene = "wildlife";
 
   const things = new Set<string>();
   for (const d of seen) if (!IGNORE_THINGS.has(d.class) && !COCO_PETS[d.class]) things.add(FRIENDLY_THING[d.class] ?? d.class);
   const best = predictions[0];
-  if (best && best.probability >= 0.4 && !petSpecies(best.className) && !SCENE_BY_NAME.has(short(best.className).toLowerCase())) things.add(short(best.className).toLowerCase());
+  if (best && best.probability >= 0.4 && !petSpecies(best.className) && !wildAnimal(best.className) && !SCENE_BY_NAME.has(short(best.className).toLowerCase())) things.add(short(best.className).toLowerCase());
 
   let event: string | null = null;
   const names = new Set(predictions.filter((p) => p.probability >= 0.15).map((p) => short(p.className)));
@@ -116,12 +134,14 @@ export function toTags(detections: Detection[], predictions: Prediction[]): Brow
 
 function caption(people: number, pets: BrowserTags["pets"], scene: string | null, things: string[]): string {
   const who = people === 0 ? "" : people === 1 ? "A person" : people <= 4 ? `${people} people` : "A group of people";
-  const pet = pets.length ? pets.map((p) => `a ${p.description}`).join(" and ") : "";
-  const subject = who && pet ? `${who} with ${pet}` : who || (pet ? pet.charAt(0).toUpperCase() + pet.slice(1) : "") || (things[0] ? `A photo of a ${things[0]}` : "A photo");
+  const pet = pets.length ? pets.map((p) => `${/^[aeiou]/i.test(p.description) ? "an" : "a"} ${p.description}`).join(" and ") : "";
+  const subject = who && pet ? `${who} with ${pet}` : who || (pet ? pet.charAt(0).toUpperCase() + pet.slice(1) : "") || (things[0] ? `A ${things[0]}` : "A photo");
   const where: Record<string, string> = {
     "beach & coast": "at the beach", "lakes & rivers": "by the water", mountains: "in the mountains", underwater: "underwater", snow: "in the snow",
-    "landmarks & buildings": "at a landmark", "food & drink": "with food and drink", "concerts & shows": "at a show", sport: "playing sport",
+    "landmarks & buildings": "at a landmark", wildlife: "", "food & drink": "with food and drink", "concerts & shows": "at a show", sport: "playing sport",
     "gardens & parks": "in a garden or park", "city & streets": "in the city", "at home": "at home", "screenshots & documents": "(screenshot or document)",
   };
-  return [subject, scene ? where[scene] : ""].filter(Boolean).join(" ");
+  // "with food and drink" only reads well about people or pets ("2 people with food and drink").
+  const place = scene && (scene !== "food & drink" || who || pet) ? where[scene] : "";
+  return [subject, place].filter(Boolean).join(" ");
 }

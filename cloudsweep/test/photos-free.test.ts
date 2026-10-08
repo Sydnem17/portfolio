@@ -103,4 +103,12 @@ describe("free photo features: places from the photo itself, and browser AI tags
     await runToEnd(await createJob("analyse", null));
     expect((await one<any>("SELECT pets FROM photo_tags WHERE item_id = 'g1:provider-gps'")).pets).toEqual([{ species: "cat", description: "tabby cat" }]);
   });
+
+  it("re-checks photos tagged by an older version of the browser rules", async () => {
+    await query("UPDATE photo_tags SET tagged_by = 'browser' WHERE item_id = 'g1:no-gps'");
+    expect((await untaggedPhotos(10)).ids).toContain("g1:no-gps");
+    await saveBrowserTags([{ id: "g1:no-gps", failed: true }]);
+    expect((await untaggedPhotos(10)).ids).not.toContain("g1:no-gps");
+    expect((await one<any>("SELECT tagged_by FROM photo_tags WHERE item_id = 'g1:no-gps'")).tagged_by).toBe("browser-v2");
+  });
 });
