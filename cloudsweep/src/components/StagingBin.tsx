@@ -58,17 +58,17 @@ export function StagingBin({ items, history }: { items: Staged[]; history: Hist[
 
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-3">
         <Stat label="In the staging bin" value={items.length.toLocaleString()} hint="files, across all drives" />
         <Stat label="Space it will free" value={bytes(total)} tone="good" hint="once providers empty their trash" />
-        <Card>
+        <Card className="col-span-2 min-w-0 xl:col-span-1">
           <p className="text-[13px] font-medium text-ink-muted">By drive</p>
           <ul className="mt-2 space-y-1.5 text-[13px]">
             {byAccount.length ? (
               byAccount.map(([a, v]) => (
-                <li key={a} className="flex justify-between gap-2">
-                  <span className="flex items-center gap-2 truncate"><span className="h-2 w-2 rounded-full" style={{ background: accountColour(v.provider, a) }} />{a}</span>
-                  <span className="text-ink-muted">{v.n} · {bytes(v.bytes)}</span>
+                <li key={a} className="flex items-center justify-between gap-3">
+                  <span className="flex min-w-0 items-center gap-2"><span className="h-2 w-2 shrink-0 rounded-full" style={{ background: accountColour(v.provider, a) }} /><span className="truncate" title={a}>{a}</span></span>
+                  <span className="shrink-0 whitespace-nowrap tabular-nums text-ink-muted">{v.n} {v.n === 1 ? "file" : "files"} · {bytes(v.bytes)}</span>
                 </li>
               ))
             ) : (
