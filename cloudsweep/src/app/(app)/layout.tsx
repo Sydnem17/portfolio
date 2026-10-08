@@ -1,5 +1,6 @@
 import { CommandPalette } from "@/components/CommandPalette";
 import { JobDock } from "@/components/JobDock";
+import { LocalScanManager } from "@/components/LocalScanManager";
 import { SetupChecklist } from "@/components/SetupChecklist";
 import { Sidebar } from "@/components/Sidebar";
 import { setupIssues } from "@/lib/setup";
@@ -21,6 +22,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="mx-auto max-w-6xl">{children}</div>
       </main>
       <JobDock />
+      <LocalScanManager />
       <CommandPalette />
     </div>
   );

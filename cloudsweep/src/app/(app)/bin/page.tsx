@@ -18,7 +18,7 @@ export default async function Bin() {
         intro="Everything CloudSweep removes lands here first, across every drive. Restore anything in one click. Each provider permanently deletes its trash on its own schedule (usually 30 days), so nothing is wiped by surprise."
       />
       <StagingBin
-        items={staged.map((r) => ({ id: Number(r.id), name: r.name, bytes: num(r.bytes), path: r.detail?.path ?? "", reason: r.detail?.reason ?? "", at: new Date(r.created_at).toISOString(), account: r.label, provider: r.provider }))}
+        items={staged.map((r) => ({ id: Number(r.id), name: r.name, bytes: num(r.bytes), path: r.detail?.path ?? "", stagedPath: r.detail?.stagedPath ?? null, reason: r.detail?.reason ?? "", at: new Date(r.created_at).toISOString(), account: r.label, accountId: r.account_id, provider: r.provider }))}
         history={history.map((r) => ({ id: Number(r.id), kind: r.kind, name: r.name, bytes: num(r.bytes), undone: r.undone, at: new Date(r.created_at).toISOString(), account: r.label, to: r.detail?.to ?? null }))}
       />
     </>

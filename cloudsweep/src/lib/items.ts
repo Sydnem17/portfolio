@@ -9,6 +9,8 @@ const COLS = [
   "lat", "lng", "width", "height", "web_url", "scan_id",
 ] as const;
 
+const SAME = "items.size = EXCLUDED.size AND items.modified_at IS NOT DISTINCT FROM EXCLUDED.modified_at";
+
 export async function upsertItems(accountId: string, items: CloudItem[], scanId: string | null) {
   for (let i = 0; i < items.length; i += 150) {
     const chunk = items.slice(i, i + 150);
@@ -24,16 +26,49 @@ export async function upsertItems(accountId: string, items: CloudItem[], scanId:
       params.push(...vals);
       return `(${vals.map((_, j) => `$${base + j + 1}`).join(",")})`;
     });
-    const updates = COLS.filter((c) => c !== "id")
+    const updates = COLS.filter((c) => !["id", "md5", "sha1", "sha256", "quick_xor", "path"].includes(c))
       .map((c) => `${c} = EXCLUDED.${c}`)
       .join(", ");
     await query(
       `INSERT INTO items (${COLS.join(",")}) VALUES ${rows.join(",")}
        ON CONFLICT (id) DO UPDATE SET ${updates}, trashed = FALSE, updated_at = now(),
-         content_sha256 = CASE WHEN items.size = EXCLUDED.size AND items.modified_at IS NOT DISTINCT FROM EXCLUDED.modified_at THEN items.content_sha256 ELSE NULL END`,
+         content_sha256 = CASE WHEN ${SAME} THEN items.content_sha256 ELSE NULL END,
+         -- Providers that only report parent IDs send no path; keep the known one unless the item moved or was renamed.
+         path = COALESCE(EXCLUDED.path, CASE WHEN items.parent_remote_id IS NOT DISTINCT FROM EXCLUDED.parent_remote_id AND items.name = EXCLUDED.name THEN items.path END),
+         -- Local folders report no hashes while listing; keep the fingerprints computed earlier if the file is unchanged.
+         md5 = COALESCE(EXCLUDED.md5, CASE WHEN ${SAME} THEN items.md5 END),
+         sha1 = COALESCE(EXCLUDED.sha1, CASE WHEN ${SAME} THEN items.sha1 END),
+         sha256 = COALESCE(EXCLUDED.sha256, CASE WHEN ${SAME} THEN items.sha256 END),
+         quick_xor = COALESCE(EXCLUDED.quick_xor, CASE WHEN ${SAME} THEN items.quick_xor END)`,
       params,
     );
   }
+}
+
+/**
+ * Fills in paths for items whose parent folder's path is already known, a few levels at a time.
+ * Runs after every scan page so the Library shows folders while a large drive is still scanning.
+ */
+export async function resolvePathsIncremental(accountId: string, maxLevels = 12): Promise<number> {
+  // The drive root (OneDrive lists it; it has no parent and no name) anchors everything else.
+  await query("UPDATE items SET path = '/' WHERE account_id = $1 AND path IS NULL AND parent_remote_id IS NULL AND name = ''", [accountId]);
+  let total = 0;
+  for (let level = 0; level < maxLevels; level++) {
+    const [r] = await query<{ n: string }>(
+      `WITH u AS (
+         UPDATE items c SET path = CASE WHEN p.path IN ('', '/') THEN '/' || c.name ELSE p.path || '/' || c.name END
+         FROM items p
+         WHERE c.account_id = $1 AND c.path IS NULL AND c.parent_remote_id IS NOT NULL
+           AND p.id = $1 || ':' || c.parent_remote_id AND p.path IS NOT NULL
+         RETURNING 1)
+       SELECT COUNT(*) AS n FROM u`,
+      [accountId],
+    );
+    const n = Number(r?.n ?? 0);
+    total += n;
+    if (!n) break;
+  }
+  return total;
 }
 
 /** Rebuilds full paths from parent links (Google/OneDrive give parents, not paths). */

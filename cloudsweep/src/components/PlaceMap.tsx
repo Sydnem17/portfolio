@@ -17,9 +17,11 @@ export function PlaceMap({ places, selected, onSelect }: { places: PhotoCollecti
       if (cancelled || !el.current) return;
       if (!map.current) {
         map.current = L.map(el.current, { zoomControl: true, attributionControl: true, scrollWheelZoom: false, worldCopyJump: true });
-        L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
-          maxZoom: 18,
+        // OpenStreetMap's standard tiles: free, no API key, attribution required. Greyed via CSS below so photos stand out.
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+          maxZoom: 19,
+          className: "cloudsweep-tiles",
         }).addTo(map.current);
         map.current.on("zoomend", () => draw());
       }

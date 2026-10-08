@@ -66,7 +66,12 @@ export function Lightbox({ items, index, onIndex, onClose }: { items: PreviewIte
         </div>
       </header>
       <div className="relative flex min-h-0 flex-1 items-center justify-center px-4 pb-4 sm:px-16" onClick={(e) => e.stopPropagation()}>
-        {it.kind === "image" ? (
+        {it.id.startsWith("local_") ? (
+          <div className="max-w-md text-center text-white/70">
+            <p className="text-[15px] text-white">This file is on your computer.</p>
+            <p className="mt-2 text-[13px]">Open it from File Explorer{it.path ? <> at <span className="text-white">{it.accountLabel}{it.path}</span></> : null}. CloudSweep doesn&apos;t upload local files, so it can&apos;t preview them here.</p>
+          </div>
+        ) : it.kind === "image" ? (
           // Show the fast thumbnail immediately; swap to the full image when the browser can decode it (HEIC/RAW can't).
           // eslint-disable-next-line @next/next/no-img-element
           <img key={it.id} src={fullFailed ? `/api/thumb/${encodeURIComponent(it.id)}` : src} onError={() => setFullFailed(true)} alt={it.caption ?? it.name} className="max-h-full max-w-full rounded-xl object-contain" />

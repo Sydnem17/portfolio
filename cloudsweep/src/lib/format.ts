@@ -45,6 +45,7 @@ export const PROVIDER_COLOUR: Record<string, string> = {
   google: "#1E8E3E",
   dropbox: "#0061FE",
   demo: "#6B7280",
+  local: "#B45309",
 };
 
 /** Brand colour for an account; demo accounts borrow the colour of the service they simulate. */
