@@ -111,3 +111,23 @@ CREATE TABLE IF NOT EXISTS demo_files (
   PRIMARY KEY (account_id, remote_id)
 );
 `;
+
+/**
+ * One-off repair for JSON values that an older build stored double-encoded (as a JSON *string*
+ * containing JSON) when running against hosted Postgres. Idempotent and cheap: only rows whose
+ * value is a JSON string are touched, and none of these columns legitimately hold plain strings.
+ */
+const JSON_COLUMNS: Array<[string, string]> = [
+  ["demo_files", "data"],
+  ["jobs", "params"],
+  ["jobs", "cursor"],
+  ["jobs", "progress"],
+  ["actions", "detail"],
+  ["photo_tags", "pets"],
+  ["photo_tags", "things"],
+  ["transfer_items", "session"],
+];
+
+export const REPAIR_JSON = JSON_COLUMNS.map(
+  ([t, c]) => `UPDATE ${t} SET ${c} = (${c} #>> '{}')::jsonb WHERE jsonb_typeof(${c}) = 'string';`,
+).join("\n");

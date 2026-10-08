@@ -1,5 +1,5 @@
 import "server-only";
-import { SCHEMA } from "./schema";
+import { REPAIR_JSON, SCHEMA } from "./schema";
 
 /**
  * Database access.
@@ -20,7 +20,21 @@ async function createDriver(): Promise<Driver> {
   const url = process.env.DATABASE_URL;
   if (url) {
     const postgres = (await import("postgres")).default;
-    const sql = postgres(url, { max: 5, idle_timeout: 20, prepare: false });
+    const sql = postgres(url, {
+      max: Number(process.env.DB_POOL_MAX ?? 5),
+      idle_timeout: 20,
+      prepare: false,
+      types: {
+        // Callers pass JSON columns as JSON.stringify()'d text (which PGlite also expects).
+        // postgres.js would stringify that string again, storing a JSON string instead of an object.
+        json: {
+          to: 114,
+          from: [114, 3802],
+          serialize: (x: unknown) => (typeof x === "string" ? x : JSON.stringify(x)),
+          parse: (x: string) => JSON.parse(x),
+        },
+      },
+    });
     return {
       query: async (text, params = []) => (await sql.unsafe(text, params as any[])) as any,
       exec: async (text) => {
@@ -49,6 +63,7 @@ async function getDriver(): Promise<Driver> {
     driverPromise = (async () => {
       const d = await createDriver();
       await d.exec(SCHEMA);
+      await d.exec(REPAIR_JSON);
       return d;
     })().catch((err) => {
       driverPromise = null; // let the next request retry instead of caching the failure
