@@ -162,10 +162,13 @@ const HANDLERS: Record<JobType, (job: Job, deadline: number) => Promise<void>> =
     while (Date.now() < deadline) {
       // Places first: many providers leave GPS out of their listings, so read it from the photo itself
       // (only the first ~192 KB is downloaded, never the whole file).
+      // Photos that couldn't be read this run (network, throttling) are retried on the next run, not marked as checked.
+      const skip: string[] = (job.cursor ??= {}).exifSkip ?? [];
       const noGps = await query<any>(
         `SELECT i.id, i.account_id, i.remote_id, i.size, a.provider FROM items i JOIN accounts a ON a.id = i.account_id
          WHERE i.kind = 'image' AND NOT i.trashed AND i.lat IS NULL AND NOT i.exif_checked AND a.provider NOT IN ('local', 'demo')
-         ORDER BY i.id LIMIT 6`,
+           AND NOT (i.id = ANY($1)) ORDER BY i.id LIMIT 6`,
+        [skip],
       );
       if (noGps.length) {
         await Promise.all(
@@ -174,11 +177,13 @@ const HANDLERS: Record<JobType, (job: Job, deadline: number) => Promise<void>> =
             const head = size
               ? await getProvider(b.provider).downloadRange(await contextFor(b.account_id), b.remote_id, 0, Math.min(size, EXIF_HEAD_BYTES) - 1).catch(() => null)
               : null;
+            if (!head && size) return void skip.push(b.id);
             const f = head ? await readExifHead(head) : { lat: null, lng: null, takenAt: null };
             await query("UPDATE items SET lat = COALESCE(lat, $2), lng = COALESCE(lng, $3), taken_at = COALESCE(taken_at, $4), exif_checked = TRUE WHERE id = $1", [b.id, f.lat, f.lng, f.takenAt]);
           }),
         );
-        const left = num((await one("SELECT COUNT(*) AS n FROM items i JOIN accounts a ON a.id = i.account_id WHERE i.kind = 'image' AND NOT i.trashed AND i.lat IS NULL AND NOT i.exif_checked AND a.provider NOT IN ('local', 'demo')"))?.n);
+        job.cursor.exifSkip = skip;
+        const left = Math.max(0, num((await one("SELECT COUNT(*) AS n FROM items i JOIN accounts a ON a.id = i.account_id WHERE i.kind = 'image' AND NOT i.trashed AND i.lat IS NULL AND NOT i.exif_checked AND a.provider NOT IN ('local', 'demo')"))?.n) - skip.length);
         job.progress = { done: 0, total, message: `Finding where photos were taken · ${left.toLocaleString()} to check` };
         continue;
       }

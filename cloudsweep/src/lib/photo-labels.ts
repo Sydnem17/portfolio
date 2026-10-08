@@ -58,6 +58,8 @@ const breedName = (className: string) => {
 };
 
 const COCO_PETS: Record<string, string> = { dog: "dog", cat: "cat", bird: "bird", horse: "horse" };
+/** Other animals the object detector knows; filed under Pets & animals as wildlife, never as "things". */
+const COCO_WILD = new Set(["bear", "cow", "elephant", "zebra", "giraffe", "sheep"]);
 
 /** Whole-picture labels (MobileNet) that tell us the scene. */
 const SCENES: Array<[string, string[]]> = [
@@ -72,7 +74,7 @@ const SCENES: Array<[string, string[]]> = [
   ["sport", ["basketball", "soccer ball", "volleyball", "rugby ball", "tennis ball", "racket", "golf ball", "ballplayer", "scoreboard", "football helmet", "golfcart", "balance beam", "parallel bars"]],
   ["gardens & parks", ["park bench", "lawn mower", "picket fence", "patio", "greenhouse", "pot", "daisy", "yellow lady's slipper", "hay"]],
   ["city & streets", ["streetcar", "cab", "trolleybus", "traffic light", "street sign", "parking meter", "police van", "minibus", "school bus", "passenger car"]],
-  ["screenshots & documents", ["web site", "menu", "envelope", "book jacket", "comic book", "crossword puzzle", "monitor", "screen", "notebook", "desktop computer"]],
+  ["graphics & screenshots", ["web site", "menu", "envelope", "book jacket", "comic book", "crossword puzzle", "monitor", "screen", "notebook", "desktop computer"]],
 ];
 const SCENE_BY_NAME = new Map(SCENES.flatMap(([scene, names]) => names.map((n) => [n.toLowerCase(), scene] as const)));
 
@@ -107,6 +109,10 @@ export function toTags(detections: Detection[], predictions: Prediction[]): Brow
   // Wild animals keep their own type ("meerkat", "red fox"), grouped under Pets & animals as wildlife.
   const wildName = predictions.find((p) => p.probability >= 0.2 && wildAnimal(p.className));
   if (wildName && !pets.length) pets.push({ species: "wildlife", description: wildAnimal(wildName.className)! });
+  // The detector also knows a few big animals; trust it only when the classifier sees some animal too.
+  const bigAnimal = seen.find((d) => COCO_WILD.has(d.class) && d.score >= 0.7);
+  if (bigAnimal && !pets.length && predictions.some((p) => p.probability >= 0.1 && (INDEX.get(p.className) ?? 999) <= 397))
+    pets.push({ species: "wildlife", description: bigAnimal.class });
   // A close-up pet often fills the frame, which the object detector can miss.
   const sure = predictions.find((p) => p.probability >= BREED_CONFIDENCE && petSpecies(p.className));
   if (sure && !pets.some((p) => p.species === petSpecies(sure.className))) pets.push({ species: petSpecies(sure.className)!, description: breedName(sure.className) });
@@ -119,10 +125,10 @@ export function toTags(detections: Detection[], predictions: Prediction[]): Brow
   scene ??= seen.map((d) => COCO_SCENES[d.class]).find(Boolean) ?? null;
   if (!scene && pets.some((p) => p.species === "wildlife")) scene = "wildlife";
 
+  // Things come only from the object detector's 80 everyday objects (laptop, cup, car…). The classifier's
+  // 1,000 labels turned app icons, designs and screenshots into "fire screen", "velvet" and "nematode".
   const things = new Set<string>();
-  for (const d of seen) if (!IGNORE_THINGS.has(d.class) && !COCO_PETS[d.class]) things.add(FRIENDLY_THING[d.class] ?? d.class);
-  const best = predictions[0];
-  if (best && best.probability >= 0.4 && !petSpecies(best.className) && !wildAnimal(best.className) && !SCENE_BY_NAME.has(short(best.className).toLowerCase())) things.add(short(best.className).toLowerCase());
+  for (const d of seen) if (d.score >= 0.6 && !IGNORE_THINGS.has(d.class) && !COCO_PETS[d.class] && !COCO_WILD.has(d.class)) things.add(FRIENDLY_THING[d.class] ?? d.class);
 
   let event: string | null = null;
   const names = new Set(predictions.filter((p) => p.probability >= 0.15).map((p) => short(p.className)));
@@ -139,9 +145,54 @@ function caption(people: number, pets: BrowserTags["pets"], scene: string | null
   const where: Record<string, string> = {
     "beach & coast": "at the beach", "lakes & rivers": "by the water", mountains: "in the mountains", underwater: "underwater", snow: "in the snow",
     "landmarks & buildings": "at a landmark", wildlife: "", "food & drink": "with food and drink", "concerts & shows": "at a show", sport: "playing sport",
-    "gardens & parks": "in a garden or park", "city & streets": "in the city", "at home": "at home", "screenshots & documents": "(screenshot or document)",
+    "gardens & parks": "in a garden or park", "city & streets": "in the city", "at home": "at home", "graphics & screenshots": "",
   };
   // "with food and drink" only reads well about people or pets ("2 people with food and drink").
   const place = scene && (scene !== "food & drink" || who || pet) ? where[scene] : "";
   return [subject, place].filter(Boolean).join(" ");
 }
+
+/**
+ * Is this a graphic (logo, design, app icon, screenshot, document) rather than a camera photo?
+ * Both AI models only know real photos, so on graphics they invent things: the Instagram logo
+ * becomes "scissors", the Spotify logo a "cup". Graphics are flat: a handful of exact colours cover
+ * most of the picture. Camera photos have noise and gradients, so their colours are spread out.
+ */
+export interface PixelStats {
+  /** Share of pixels in the 4 most common (slightly quantised) colours. */
+  top4: number;
+  /** How many distinct quantised colours appear. */
+  distinct: number;
+}
+
+export function pixelStats(rgba: ArrayLike<number>): PixelStats {
+  const counts = new Map<number, number>();
+  let n = 0;
+  for (let i = 0; i + 3 < rgba.length; i += 4) {
+    if (rgba[i + 3] < 16) continue; // transparent background: typical of logos
+    const key = ((rgba[i] >> 4) << 8) | ((rgba[i + 1] >> 4) << 4) | (rgba[i + 2] >> 4);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+    n++;
+  }
+  if (!n) return { top4: 1, distinct: 0 };
+  const top = [...counts.values()].sort((a, b) => b - a).slice(0, 4).reduce((s, v) => s + v, 0);
+  return { top4: top / n, distinct: counts.size };
+}
+
+const CAMERA_NAME = /^(img|dsc|dscn|pxl|mvimg|gopr|dji|p\d{3}|sam|wp)[_-]?\d|^\d{8}[_-]\d{6}|^photo[_ -]?\d/i;
+const GRAPHIC_NAME = /screenshot|screen shot|screen_shot|logo|icon|banner|poster|flyer|design|canva|mockup|template|graphic|sticker|emoji|clipart|meme|qr/i;
+const GRAPHIC_TYPE = /\.(png|svg|gif|webp|bmp|ico|ai|eps|psd)$/i;
+
+export function looksLikeGraphic(file: { name: string; mime?: string | null }, stats: PixelStats | null, transparent = false): boolean {
+  if (transparent) return true;
+  if (GRAPHIC_NAME.test(file.name)) return true;
+  const camera = CAMERA_NAME.test(file.name) || /\.(heic|heif|dng|cr2|nef|arw)$/i.test(file.name);
+  // Measured on 48×48 thumbnails: camera photos show 150–250 colours even with a big plain sky;
+  // logos, icons, documents and screenshots show 4–80.
+  const flat = stats ? stats.distinct < 100 || (stats.top4 >= 0.8 && stats.distinct < 160) : false;
+  if (camera) return !!stats && stats.distinct < 40; // only extreme cases (e.g. a photo of a blank screen)
+  if (GRAPHIC_TYPE.test(file.name) || /png|svg|gif|webp/.test(file.mime ?? "")) return !stats || !(stats.distinct >= 160 && stats.top4 < 0.5);
+  return flat;
+}
+
+export const GRAPHIC_TAGS: BrowserTags = { people_count: 0, pets: [], things: [], scene: "graphics & screenshots", event: null, caption: "A graphic, logo or screenshot" };

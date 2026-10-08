@@ -62,3 +62,37 @@ describe("free browser AI → photo tags", () => {
     expect(toTags(det(["bird", 0.8]), pred(["sulphur-crested cockatoo, Kakatoe galerita, Cacatua galerita", 0.62])).pets).toEqual([{ species: "bird", description: "sulphur-crested cockatoo" }]);
   });
 });
+
+describe("telling graphics from photos", async () => {
+  const { looksLikeGraphic, pixelStats } = await import("@/lib/photo-labels");
+  const solid = (colours: number[][], n = 48 * 48) => {
+    const a = new Uint8ClampedArray(n * 4);
+    for (let i = 0; i < n; i++) a.set([...colours[i % colours.length], 255], i * 4);
+    return a;
+  };
+  const noisy = () => {
+    const a = new Uint8ClampedArray(48 * 48 * 4);
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) >> 16) & 255;
+    for (let i = 0; i < a.length; i += 4) a.set([rnd(), rnd(), rnd(), 255], i);
+    return a;
+  };
+
+  it("measures colour spread", () => {
+    expect(pixelStats(solid([[0, 0, 0], [255, 255, 255]]))).toEqual({ top4: 1, distinct: 2 });
+    expect(pixelStats(noisy()).distinct).toBeGreaterThan(200);
+  });
+
+  it("flags logos, screenshots and documents; keeps real photos", () => {
+    const flat = pixelStats(solid([[0, 0, 0], [30, 215, 96], [255, 255, 255]]));
+    const photo = pixelStats(noisy());
+    expect(looksLikeGraphic({ name: "spotify.jpg" }, flat)).toBe(true);
+    expect(looksLikeGraphic({ name: "Screenshot_20240316-101500.png" }, photo)).toBe(true);
+    expect(looksLikeGraphic({ name: "Harlem Hustle logo final.jpg" }, photo)).toBe(true);
+    expect(looksLikeGraphic({ name: "IMG_2041.jpg" }, photo)).toBe(false);
+    expect(looksLikeGraphic({ name: "IMG_2041.jpg" }, { top4: 0.5, distinct: 168 })).toBe(false); // beach with a big grey sky
+    expect(looksLikeGraphic({ name: "IMG_2041.jpg" }, flat)).toBe(true); // a photo of a blank screen
+    expect(looksLikeGraphic({ name: "holiday.png", mime: "image/png" }, photo)).toBe(false); // a real photo saved as PNG
+    expect(looksLikeGraphic({ name: "artwork.png", mime: "image/png" }, { top4: 0.6, distinct: 120 })).toBe(true);
+  });
+});

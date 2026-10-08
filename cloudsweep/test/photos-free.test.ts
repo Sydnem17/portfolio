@@ -17,6 +17,7 @@ vi.mock("@/lib/providers", async (orig) => {
     ...real.getProvider("google"),
     downloadRange: async (_ctx: unknown, remoteId: string, start: number, end: number) => {
       downloads.push(`${remoteId}:${start}-${end}`);
+      if (remoteId === "flaky") throw new Error("429 Too Many Requests");
       return (remoteId === "with-gps" ? gpsJpeg : plainJpeg).subarray(start, end + 1);
     },
     thumbnail: async () => null,
@@ -109,6 +110,13 @@ describe("free photo features: places from the photo itself, and browser AI tags
     expect((await untaggedPhotos(10)).ids).toContain("g1:no-gps");
     await saveBrowserTags([{ id: "g1:no-gps", failed: true }]);
     expect((await untaggedPhotos(10)).ids).not.toContain("g1:no-gps");
-    expect((await one<any>("SELECT tagged_by FROM photo_tags WHERE item_id = 'g1:no-gps'")).tagged_by).toBe("browser-v2");
+    expect((await one<any>("SELECT tagged_by FROM photo_tags WHERE item_id = 'g1:no-gps'")).tagged_by).toBe("browser-v3");
+  });
+
+  it("retries photos it couldn't read on the next run instead of marking them checked", async () => {
+    await upsertItems("g1", [photo("flaky")], "s9");
+    expect((await runToEnd(await createJob("analyse", null))).status).toBe("done");
+    expect((await one<any>("SELECT exif_checked FROM items WHERE id = 'g1:flaky'")).exif_checked).toBe(false);
+    expect((await photoCollections()).gpsToCheck).toBeGreaterThanOrEqual(1);
   });
 });
