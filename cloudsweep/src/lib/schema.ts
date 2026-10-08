@@ -110,6 +110,11 @@ CREATE TABLE IF NOT EXISTS demo_files (
   data        JSONB NOT NULL,
   PRIMARY KEY (account_id, remote_id)
 );
+
+-- Added later: where a photo's tags came from (claude / browser / demo), and whether a photo's own
+-- EXIF has been read for GPS (providers often leave location out of their listings).
+ALTER TABLE photo_tags ADD COLUMN IF NOT EXISTS tagged_by TEXT;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS exif_checked BOOLEAN NOT NULL DEFAULT FALSE;
 `;
 
 /**

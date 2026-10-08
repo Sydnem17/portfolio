@@ -26,7 +26,7 @@ export async function upsertItems(accountId: string, items: CloudItem[], scanId:
       params.push(...vals);
       return `(${vals.map((_, j) => `$${base + j + 1}`).join(",")})`;
     });
-    const updates = COLS.filter((c) => !["id", "md5", "sha1", "sha256", "quick_xor", "path"].includes(c))
+    const updates = COLS.filter((c) => !["id", "md5", "sha1", "sha256", "quick_xor", "path", "lat", "lng", "taken_at"].includes(c))
       .map((c) => `${c} = EXCLUDED.${c}`)
       .join(", ");
     await query(
@@ -39,7 +39,12 @@ export async function upsertItems(accountId: string, items: CloudItem[], scanId:
          md5 = COALESCE(EXCLUDED.md5, CASE WHEN ${SAME} THEN items.md5 END),
          sha1 = COALESCE(EXCLUDED.sha1, CASE WHEN ${SAME} THEN items.sha1 END),
          sha256 = COALESCE(EXCLUDED.sha256, CASE WHEN ${SAME} THEN items.sha256 END),
-         quick_xor = COALESCE(EXCLUDED.quick_xor, CASE WHEN ${SAME} THEN items.quick_xor END)`,
+         quick_xor = COALESCE(EXCLUDED.quick_xor, CASE WHEN ${SAME} THEN items.quick_xor END),
+         -- GPS and date read from the photo itself survive rescans when the provider reports none.
+         lat = COALESCE(EXCLUDED.lat, CASE WHEN ${SAME} THEN items.lat END),
+         lng = COALESCE(EXCLUDED.lng, CASE WHEN ${SAME} THEN items.lng END),
+         taken_at = COALESCE(EXCLUDED.taken_at, CASE WHEN ${SAME} THEN items.taken_at END),
+         exif_checked = CASE WHEN ${SAME} THEN items.exif_checked ELSE FALSE END`,
       params,
     );
   }

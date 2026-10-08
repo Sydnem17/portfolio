@@ -5,6 +5,7 @@ import { newId } from "./crypto";
 import { num, one, query } from "./db";
 import { findDuplicates } from "./dedupe";
 import { loadFiles, logAction, resolvePaths, resolvePathsIncremental, upsertItems } from "./items";
+import { EXIF_HEAD_BYTES, readExifHead } from "./photos/exif";
 import { dHash, toJpeg } from "./photos/phash";
 import { tagPhotos, visionEnabled } from "./photos/vision";
 import { getProvider } from "./providers";
@@ -159,6 +160,28 @@ const HANDLERS: Record<JobType, (job: Job, deadline: number) => Promise<void>> =
     const useVision = visionEnabled();
     const total = num((await one("SELECT COUNT(*) AS n FROM items WHERE kind = 'image' AND NOT trashed"))?.n);
     while (Date.now() < deadline) {
+      // Places first: many providers leave GPS out of their listings, so read it from the photo itself
+      // (only the first ~192 KB is downloaded, never the whole file).
+      const noGps = await query<any>(
+        `SELECT i.id, i.account_id, i.remote_id, i.size, a.provider FROM items i JOIN accounts a ON a.id = i.account_id
+         WHERE i.kind = 'image' AND NOT i.trashed AND i.lat IS NULL AND NOT i.exif_checked AND a.provider NOT IN ('local', 'demo')
+         ORDER BY i.id LIMIT 6`,
+      );
+      if (noGps.length) {
+        await Promise.all(
+          noGps.map(async (b) => {
+            const size = num(b.size);
+            const head = size
+              ? await getProvider(b.provider).downloadRange(await contextFor(b.account_id), b.remote_id, 0, Math.min(size, EXIF_HEAD_BYTES) - 1).catch(() => null)
+              : null;
+            const f = head ? await readExifHead(head) : { lat: null, lng: null, takenAt: null };
+            await query("UPDATE items SET lat = COALESCE(lat, $2), lng = COALESCE(lng, $3), taken_at = COALESCE(taken_at, $4), exif_checked = TRUE WHERE id = $1", [b.id, f.lat, f.lng, f.takenAt]);
+          }),
+        );
+        const left = num((await one("SELECT COUNT(*) AS n FROM items i JOIN accounts a ON a.id = i.account_id WHERE i.kind = 'image' AND NOT i.trashed AND i.lat IS NULL AND NOT i.exif_checked AND a.provider NOT IN ('local', 'demo')"))?.n);
+        job.progress = { done: 0, total, message: `Finding where photos were taken · ${left.toLocaleString()} to check` };
+        continue;
+      }
       const batch = await query<any>(
         `SELECT i.id, i.account_id, i.remote_id, a.provider FROM items i JOIN accounts a ON a.id = i.account_id
          LEFT JOIN photo_tags t ON t.item_id = i.id
@@ -191,15 +214,16 @@ const HANDLERS: Record<JobType, (job: Job, deadline: number) => Promise<void>> =
           const li = live.findIndex((x) => x.b.id === b.id);
           t = tags.find((x) => x.index === li) ?? null;
         }
+        // No AI result: just mark the photo as seen, and never wipe tags the browser AI already added.
         await query(
-          `INSERT INTO photo_tags (item_id, people_count, pets, things, scene, event, place_hint, caption) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-           ON CONFLICT (item_id) DO UPDATE SET people_count = EXCLUDED.people_count, pets = EXCLUDED.pets, things = EXCLUDED.things,
-             scene = EXCLUDED.scene, event = EXCLUDED.event, place_hint = EXCLUDED.place_hint, caption = EXCLUDED.caption, analysed_at = now()`,
-          [b.id, t?.people_count ?? 0, JSON.stringify(t?.pets ?? []), JSON.stringify(t?.things ?? []), t?.scene ?? null, t?.event ?? null, t?.place_hint ?? null, t?.caption ?? null],
+          `INSERT INTO photo_tags (item_id, people_count, pets, things, scene, event, place_hint, caption, tagged_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+           ON CONFLICT (item_id) DO ${t ? `UPDATE SET people_count = EXCLUDED.people_count, pets = EXCLUDED.pets, things = EXCLUDED.things,
+             scene = EXCLUDED.scene, event = EXCLUDED.event, place_hint = EXCLUDED.place_hint, caption = EXCLUDED.caption, tagged_by = EXCLUDED.tagged_by, analysed_at = now()` : "NOTHING"}`,
+          [b.id, t?.people_count ?? 0, JSON.stringify(t?.pets ?? []), JSON.stringify(t?.things ?? []), t?.scene ?? null, t?.event ?? null, t?.place_hint ?? null, t?.caption ?? null, t ? (b.provider === "demo" ? "demo" : "claude") : null],
         );
       }
       const remaining = num((await one(`SELECT COUNT(*) AS n FROM items i LEFT JOIN photo_tags t ON t.item_id = i.id WHERE i.kind = 'image' AND NOT i.trashed AND (i.phash IS NULL OR t.item_id IS NULL)`))?.n);
-      job.progress = { done: total - remaining, total, message: useVision ? "Analysing photos with AI" : "Fingerprinting photos (add an Anthropic key for AI tags)" };
+      job.progress = { done: total - remaining, total, message: useVision ? "Analysing photos with AI" : "Finding look-alike photos" };
     }
   },
 

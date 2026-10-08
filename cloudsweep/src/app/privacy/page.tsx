@@ -58,6 +58,16 @@ export default function Privacy() {
           </p>
         </Section>
 
+        <Section title="Photo tagging and places">
+          <p>
+            Free photo tagging (pets, people counts, scenes and things) runs on <b>your own device</b>: your browser downloads two open AI models
+            from Google&rsquo;s public model store (storage.googleapis.com) once, then looks at CloudSweep&rsquo;s small thumbnails locally. Photos and
+            thumbnails are not sent to any AI service. Only the resulting tags (for example &ldquo;dog: beagle&rdquo;, &ldquo;beach &amp; coast&rdquo;)
+            are saved to your library. To find where a photo was taken when your drive doesn&rsquo;t report it, the app reads the first part of the
+            photo file (its EXIF data) and keeps only the location and date.
+          </p>
+        </Section>
+
         <Section title="2. Google user data and permissions requested">
           <p>For Google Drive, the app requests these permissions:</p>
           <ul className="list-disc space-y-1.5 pl-5">

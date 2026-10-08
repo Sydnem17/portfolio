@@ -84,7 +84,7 @@ export function JobDock() {
     })();
   }, [jobs, load, router]);
 
-  const localRunning = local.filter((t) => t.phase === "listing" || t.phase === "fingerprinting");
+  const localRunning = local.filter((t) => t.phase === "listing" || t.phase === "fingerprinting" || t.phase === "working");
   const localDone = local.filter((t) => !localRunning.includes(t));
   const running = jobs.length + localRunning.length;
   const wasRunning = useRef(0);
@@ -121,7 +121,7 @@ export function JobDock() {
       <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
         <p className="text-[13px] font-semibold">
           {running ? `${running} task${running === 1 ? "" : "s"} running` : "Background tasks"}
-          {(jobs.some((j) => j.type === "scan") || localRunning.length > 0) && <span className="ml-2 font-normal text-good">🔒 metadata only</span>}
+          {(jobs.some((j) => j.type === "scan") || localRunning.some((t) => !t.title)) && <span className="ml-2 font-normal text-good">🔒 metadata only</span>}
         </p>
         <button onClick={() => toggle(true)} className="rounded-lg px-2 py-0.5 text-[13px] text-ink-muted hover:bg-slate-100 hover:text-ink" aria-label="Minimise background tasks" title="Minimise (tasks keep running)">
           ▾ Minimise
@@ -154,7 +154,7 @@ export function JobDock() {
         {localRunning.map((t) => (
           <li key={t.id} className="px-4 py-3">
             <div className="flex items-center justify-between gap-2">
-              <p className="truncate text-[13px] font-medium">Scanning {t.label}</p>
+              <p className="truncate text-[13px] font-medium">{t.title ?? `Scanning ${t.label}`}</p>
               <button className="shrink-0 text-[12px] text-ink-muted hover:text-bad" onClick={() => window.dispatchEvent(new CustomEvent("cloudsweep:local-cancel", { detail: t.id }))}>
                 Cancel
               </button>
@@ -169,7 +169,7 @@ export function JobDock() {
         {localDone.map((t) => (
           <li key={t.id} className={`flex items-start justify-between gap-3 px-4 py-2.5 text-[12px] ${t.phase === "failed" ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"}`}>
             <span>
-              <b>Scanning {t.label}</b> {t.phase === "failed" ? `failed: ${t.error}` : `— ${t.message}`}
+              <b>{t.title ?? `Scanning ${t.label}`}</b> {t.phase === "failed" ? `failed: ${t.error}` : `— ${t.message}`}
             </span>
             <button onClick={() => window.dispatchEvent(new CustomEvent("cloudsweep:local-dismiss", { detail: t.id }))} aria-label="Dismiss">
               ✕

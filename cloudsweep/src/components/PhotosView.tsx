@@ -4,13 +4,14 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
 import type { PhotoCollection } from "@/lib/photos/groups";
 import { announceJobs } from "./JobDock";
+import { startPhotoTagging } from "@/lib/photo-ai";
 import { Lightbox, type PreviewItem } from "./Lightbox";
 import { buttonClass, Card, Empty, PageHeader } from "./ui";
 
 const PlaceMap = dynamic(() => import("./PlaceMap").then((m) => m.PlaceMap), { ssr: false, loading: () => <div className="h-[380px] animate-pulse rounded-2xl bg-slate-100" /> });
 
 type Tab = "places" | "pets" | "people" | "events" | "scenes" | "things";
-interface Data { total: number; analysed: number; places: PhotoCollection[]; pets: PhotoCollection[]; people: PhotoCollection[]; events: PhotoCollection[]; scenes: PhotoCollection[]; things: PhotoCollection[] }
+interface Data { total: number; analysed: number; located: number; gpsToCheck: number; lookalikePending: number; toTag: number; places: PhotoCollection[]; pets: PhotoCollection[]; people: PhotoCollection[]; events: PhotoCollection[]; scenes: PhotoCollection[]; things: PhotoCollection[] }
 
 const TABS: Array<{ id: Tab; label: string; icon: string }> = [
   { id: "places", label: "Places", icon: "📍" },
@@ -48,7 +49,13 @@ export function PhotosView({ vision }: { vision: boolean }) {
   const list = data[tab];
   const current = list.find((c) => c.key === open) ?? null;
   const items: PreviewItem[] = (current?.photos ?? []).map((p) => ({ id: p.id, name: p.name, kind: "image", accountLabel: p.accountLabel, takenAt: p.takenAt, caption: p.caption }));
-  const pending = data.total - data.analysed;
+  // Server: places (GPS read from each photo) and look-alikes. Device: pets, scenes and things, unless Claude is set up.
+  const work = data.gpsToCheck + data.lookalikePending + (vision ? data.total - data.analysed : data.toTag);
+  const analyse = async () => {
+    await fetch("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "analyse" }) });
+    announceJobs();
+    if (!vision) startPhotoTagging();
+  };
 
   return (
     <>
@@ -56,24 +63,28 @@ export function PhotosView({ vision }: { vision: boolean }) {
         title="Photos"
         intro={`${data.total.toLocaleString()} photos from every drive, organised by where they were taken and what's in them.`}
         actions={
-          pending > 0 && (
-            <button
-              className={buttonClass("brand")}
-              onClick={async () => {
-                await fetch("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "analyse" }) });
-                announceJobs();
-              }}
-            >
-              ✦ Analyse {pending.toLocaleString()} photo{pending === 1 ? "" : "s"}
+          work > 0 && (
+            <button className={buttonClass("brand")} onClick={analyse}>
+              ✦ Analyse photos
             </button>
           )
         }
       />
-      {!vision && (
-        <div className="mb-6 rounded-xl border border-line bg-white px-4 py-3 text-[13px] text-ink-muted">
-          Places and look-alike detection work now. Add an <b>ANTHROPIC_API_KEY</b> to unlock pets, events, scenes and things for your real photos (demo photos are pre-tagged).
-        </div>
-      )}
+      <div className="mb-6 grid gap-2 rounded-xl border border-line bg-white px-4 py-3 text-[13px] text-ink-soft sm:grid-cols-2">
+        <p>
+          📍 <b>{data.located.toLocaleString()}</b> of {data.total.toLocaleString()} photos have a location
+          {data.gpsToCheck > 0 ? <span className="text-ink-muted"> · {data.gpsToCheck.toLocaleString()} still to check</span> : null}
+        </p>
+        <p>
+          🐾 {vision ? "Pets, scenes and things by Claude" : "Pets, scenes and things by free AI on this device"}
+          {!vision && data.toTag > 0 ? <span className="text-ink-muted"> · {data.toTag.toLocaleString()} to tag</span> : null}
+        </p>
+        {!vision && work > 0 && (
+          <p className="text-[12px] text-ink-muted sm:col-span-2">
+            Tagging runs on this phone or computer — your photos never leave it. Keep CloudSweep open while it works; you can use other pages.
+          </p>
+        )}
+      </div>
 
       <div className="mb-6 flex gap-2 overflow-x-auto pb-1" role="tablist">
         {TABS.map((t) => (
@@ -98,7 +109,18 @@ export function PhotosView({ vision }: { vision: boolean }) {
       )}
 
       {list.length === 0 ? (
-        <Empty title={`No ${tab} found yet`} body={data.analysed < data.total ? "Run “Analyse photos” to let CloudSweep look inside your pictures." : "Nothing matched this category in your library."} />
+        <Empty
+          title={`No ${tab} found yet`}
+          body={
+            tab === "places"
+              ? data.gpsToCheck
+                ? `${data.gpsToCheck.toLocaleString()} photos haven't been checked for a location yet. Tap “Analyse photos” to read where each one was taken.`
+                : "None of your photos have location data saved in them. Turn on location for your phone's camera to have new photos placed on the map."
+              : work > 0
+                ? "Tap “Analyse photos” to let CloudSweep look inside your pictures."
+                : "Nothing matched this category in your library."
+          }
+        />
       ) : tab === "places" ? (
         <div className="grid gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
           <PlaceMap places={list} selected={open} onSelect={select} />
