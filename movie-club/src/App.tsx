@@ -226,7 +226,7 @@ function HeaderSearch({ initial }: { initial: string }) {
     navigate(`/search?q=${encodeURIComponent(q.trim())}`);
   };
   return (
-    <form className="search-form" role="search" onSubmit={submit}>
+    <form className="search-form" role="search" aria-label="Site search" onSubmit={submit}>
       <Icon name="search" />
       <label className="visually-hidden" htmlFor="site-search">
         Find a film, person, song or reference

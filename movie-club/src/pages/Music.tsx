@@ -135,6 +135,7 @@ function ArtistPage({ id }: { id: string }) {
           })}
         </p>
       )}
+      <h2 className="visually-hidden">Songs</h2>
       <div className="music-grid">
         {links.map((m) => (
           <MusicCard key={m.id} link={m} />

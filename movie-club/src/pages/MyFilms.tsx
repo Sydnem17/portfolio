@@ -67,6 +67,8 @@ export function MyFilms({ query }: { query: URLSearchParams }) {
   const [filters, setFiltersState] = useState<Filters>(() => fromQuery(query));
   const [addOpen, setAddOpen] = useState(false);
   const [shelvesOpen, setShelvesOpen] = useState(false);
+  // Filters start folded away on phones so films appear first; always open on wider screens.
+  const [filtersOpen, setFiltersOpen] = useState(() => typeof window === 'undefined' || !window.matchMedia || window.matchMedia('(min-width: 760px)').matches);
   const view = state.prefs.view;
 
   const setFilters = (next: Filters) => {
@@ -151,6 +153,10 @@ export function MyFilms({ query }: { query: URLSearchParams }) {
           </div>
         </div>
 
+        <details className="filters" open={filtersOpen} onToggle={(e) => setFiltersOpen((e.target as HTMLDetailsElement).open)}>
+          <summary className="btn btn-secondary btn-sm">
+            Filters{chips.length ? ` (${chips.length} active)` : ''}
+          </summary>
         <div className="filter-row">
           <div className="field">
             <label htmlFor="f-decade">Decade</label>
@@ -228,6 +234,7 @@ export function MyFilms({ query }: { query: URLSearchParams }) {
             <input type="checkbox" checked={filters.archived} onChange={(e) => set('archived', e.target.checked)} /> Show archived ({archivedCount})
           </label>
         </div>
+        </details>
 
         {chips.length > 0 && (
           <div className="active-filters" aria-label="Active filters">

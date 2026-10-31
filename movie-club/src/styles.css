@@ -667,7 +667,6 @@ select.select {
   font-weight: 600;
   font-size: max(6px, 7.5cqi);
   letter-spacing: 0.12em;
-  opacity: 0.85;
 }
 .cover-title {
   font-family: var(--display);
@@ -695,7 +694,6 @@ select.select {
   font-size: max(9px, 5.6cqi);
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  opacity: 0.8;
   margin-top: 5%;
   font-weight: 600;
 }
@@ -1940,4 +1938,20 @@ dialog.dialog::backdrop {
   .spotlight h3 {
     font-size: 22px;
   }
+}
+
+details.filters {
+  display: grid;
+  gap: 12px;
+}
+details.filters > summary {
+  list-style: none;
+  justify-self: start;
+  width: fit-content;
+}
+details.filters > summary::-webkit-details-marker {
+  display: none;
+}
+details.filters[open] > summary {
+  margin-bottom: 12px;
 }

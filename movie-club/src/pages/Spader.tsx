@@ -61,6 +61,7 @@ export function Spader() {
         </p>
       </div>
 
+      <h2 className="visually-hidden">{view === 'shelf' ? 'Spader shelf' : 'Films in order'}</h2>
       {view === 'shelf' ? (
         <div className="shelf-grid">
           {spader.map((f) => (

@@ -38,7 +38,7 @@ export function Trails({ trailId, query }: { trailId?: string; query: URLSearchP
         <TrailView trail={trail} />
       ) : (
         <>
-          <form className="row-wrap" role="search" onSubmit={submit} style={{ alignItems: 'flex-end', marginBottom: 18 }}>
+          <form className="row-wrap" role="search" aria-label="Reference search" onSubmit={submit} style={{ alignItems: 'flex-end', marginBottom: 18 }}>
             <div className="field" style={{ flex: '1 1 280px' }}>
               <label htmlFor="trail-q">Start with something you recognise</label>
               <input id="trail-q" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="A song, a line, a prop, an image" />

@@ -57,7 +57,9 @@ const discovery = dialog.locator('article.pick', { hasText: 'A new discovery' })
 const chosenTitle = (await discovery.locator('h3').innerText()).trim();
 await discovery.getByRole('button', { name: 'Choose this' }).click();
 await page.waitForURL(/#\/film\//);
-check('Choose this opens the film page', (await page.locator('h1').first().innerText()).includes(chosenTitle), chosenTitle);
+const filmHeading = page.locator('article h1', { hasText: chosenTitle });
+await filmHeading.waitFor({ timeout: 5000 }).catch(() => {});
+check('Choose this opens the film page', await filmHeading.isVisible(), chosenTitle);
 
 // 2. Explore a music / reference connection.
 await page.goto(`${BASE}#/connections/trails/pottery-wheel`);
